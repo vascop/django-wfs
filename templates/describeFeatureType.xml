@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema
+    xmlns:ogc="http://www.opengis.net/ogc"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns="http://www.w3.org/2001/XMLSchema"
+    xmlns:gml="http://www.opengis.net/gml">
+
+<import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/2.1.2/feature.xsd"/>
+
+{% for featuretype in featuretypes %}
+<element name="{{ featuretype.name }}" type="{{ featuretype.name }}" substitutionGroup="gml:_Feature"/>
+<complexType name="{{ featuretype.name }}">
+    <complexContent>
+        <extension base="gml:AbstractFeatureType">
+            <sequence>
+                {{ featuretype.xml|safe }}
+            </sequence>
+        </extension>
+    </complexContent>
+</complexType>
+{% endfor %}
+</schema>

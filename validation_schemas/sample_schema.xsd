@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema
+    xmlns:ogc="http://www.opengis.net/ogc"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns="http://www.w3.org/2001/XMLSchema"
+    xmlns:gml="http://www.opengis.net/gml">
+
+<import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/2.1.2/feature.xsd"/>
+<element name="sample" type="sampleType" substitutionGroup="gml:_Feature"/>
+
+
+<complexType name="sampleType">
+    <complexContent>
+        <extension base="gml:AbstractFeatureType">
+            <sequence>
+                <element name="geometry" type="gml:PointPropertyType" minOccurs="0" maxOccurs="1"/>
+                <element name="sandDB_identifier" type="string"/>
+                <element name="retrieval_date" type="string"/>
+            </sequence>
+        </extension>
+    </complexContent>
+</complexType>
+</schema>

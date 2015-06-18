@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<xsd:schema 
+  targetNamespace="http://www.opengis.net/wfs"
+   xmlns:wfs="http://www.opengis.net/wfs"
+   xmlns:gml="http://www.opengis.net/gml"
+   xmlns:ogc="http://www.opengis.net/ogc"
+   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+   elementFormDefault="qualified"
+   version="1.0.0.3">
+
+    <xsd:element name="GetCapabilities" type="wfs:GetCapabilitiesType"/>
+
+    <xsd:complexType name="GetCapabilitiesType">
+        <xsd:attribute name="version" type="xsd:string" use="optional"/>
+        <xsd:attribute name="service" type="xsd:string" use="required" fixed="WFS"/>
+    </xsd:complexType> 
+
+</xsd:schema>

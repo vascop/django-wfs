@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WFS_Capabilities 
+    xmlns="http://www.opengis.net/wfs" 
+    {% for ns in namespaces %}
+      xmlns:{{ns.name}}="{{ns.domain}}"
+    {% endfor %}
+    xmlns:ogc="http://www.opengis.net/ogc"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    version="1.0.0" 
+    xsi:schemaLocation="http://www.opengis.net/wfs http://geoserver.org/geoserver/schemas/wfs/1.0.0/WFS-capabilities.xsd">
+
+    <Service>
+        <Name>{{ service.name }}</Name>
+        <Title>{{ service.title }}</Title>
+        {% if service.abstract %}<Abstract>{{ service.abstract }}</Abstract>{% endif %}
+        <Keywords>{% if service.keywords %}{{ service.keywords }}{% endif %}</Keywords>
+        <OnlineResource>{{ service.online_resource }}</OnlineResource>
+        {% if service.fees %}<Fees>{{ service.fees }}</Fees>{% endif %}
+        {% if service.access_constraints %}<AccessConstraints>{{ service.access_constraints</AccessConstraints>{% endif %}
+    </Service>
+
+    <Capability>
+        <Request>
+
+            <GetCapabilities>
+                <DCPType>
+                    <HTTP>
+                        <Get onlineResource="{{ service.onlineresource }}?request=GetCapabilities"/>
+                    </HTTP>
+                </DCPType>
+                <DCPType>
+                    <HTTP>
+                        <Post onlineResource="{{ service.onlineresource }}"/>
+                    </HTTP>
+                </DCPType>
+            </GetCapabilities>
+
+            <DescribeFeatureType>
+                <SchemaDescriptionLanguage>
+                    <XMLSCHEMA/>
+                </SchemaDescriptionLanguage>
+                <DCPType>
+                    <HTTP>
+                        <Get onlineResource="{{ service.onlineresource }}?request=DescribeFeatureType"/>
+                    </HTTP>
+                </DCPType>
+                <DCPType>
+                    <HTTP>
+                        <Post onlineResource="{{ service.onlineresource }}"/>
+                    </HTTP>
+                </DCPType>
+            </DescribeFeatureType>
+
+            <GetFeature>
+                <ResultFormat>
+                    <GML2/>
+                </ResultFormat>
+                <DCPType>
+                    <HTTP>
+                        <Get onlineResource="{{ service.onlineresource }}?request=GetFeature"/>
+                   </HTTP>
+                </DCPType>
+                <DCPType>
+                    <HTTP>
+                        <Post onlineResource="{{ service.onlineresource }}"/>
+                    </HTTP>
+                </DCPType>
+            </GetFeature>
+
+        </Request>
+    </Capability>
+
+    <FeatureTypeList>
+        <Operations>
+            <Query/>
+        </Operations>
+        {% for feature in service.featuretype_set.all %}
+        <FeatureType>
+            <Name>{{ feature.name }}</Name>
+            <Title>{{ feature.title }}</Title>
+            <Abstract>{{ feature.abstract }}</Abstract>
+            <Keywords>{{ feature.keywords }}</Keywords>
+            <SRS>{{ feature.srs }}</SRS>
+            {% for bbox in feature.boundingbox_set.all %}
+                <LatLongBoundingBox minx="{{ bbox.minx }}" miny="{{ bbox.miny }}" maxx="{{ bbox.maxx }}" maxy="{{ bbox.maxy }}"/>
+            {% endfor %}
+        </FeatureType>
+        {% endfor %}
+    </FeatureTypeList>
+
+    <ogc:Filter_Capabilities>
+        <ogc:Spatial_Capabilities>
+            <ogc:Spatial_Operators>
+                <ogc:BBOX/>
+            </ogc:Spatial_Operators>
+        </ogc:Spatial_Capabilities>
+        <ogc:Scalar_Capabilities>
+            <ogc:Logical_Operators/>
+        </ogc:Scalar_Capabilities>
+    </ogc:Filter_Capabilities>
+
+</WFS_Capabilities>
