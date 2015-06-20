@@ -7,7 +7,7 @@ from django.contrib.contenttypes.models import ContentType
 class Service(models.Model):
     name = models.CharField(max_length=254)
     title = models.CharField(max_length=254)
-    keywords = models.CharField(max_length=254)
+    keywords = models.CharField(null=True, blank=True, max_length=254, help_text='Comma separated list of keywords.')
     abstract = models.TextField(null=True, blank=True)
     fees = models.CharField(null=True, blank=True, max_length=254)
     access_constraints = models.CharField(null=True, blank=True, max_length=254)
