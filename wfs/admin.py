@@ -20,7 +20,8 @@ class FeatureTypeForm(forms.ModelForm):
         super(FeatureTypeForm, self).__init__(*args, **kwargs)
         if hasattr(self.instance, "model"):
             self.fields['fields'].choices = [(field.name, field.name) for field in self.instance.model.model_class()._meta.fields]
-            self.initial['fields'] = [str(field) for field in self.instance.fields.split(",")]
+            if self.instance.fields:
+                self.initial['fields'] = [str(field) for field in self.instance.fields.split(",")]
 
     class Meta:
         model = FeatureType

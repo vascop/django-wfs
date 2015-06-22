@@ -3,5 +3,5 @@ from wfs.views import global_handler
 
 # APP
 urlpatterns = patterns('',
-    url(r'^(?P<service_id>\d+)/$', global_handler, name='global_handler'),
+    url(r'^(?P<service_id>\d+)/$', global_handler, name='wfs'),
 )
