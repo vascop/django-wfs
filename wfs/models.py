@@ -16,7 +16,7 @@ class Service(models.Model):
         return 'http://%s%s' % (Site.objects.get_current().domain, self.get_absolute_url())
 
     def get_absolute_url(self):
-        return reverse('global_handler', kwargs={'service_id': self.pk})
+        return reverse('wfs', kwargs={'service_id': self.pk})
 
     def __unicode__(self):
         return self.name
