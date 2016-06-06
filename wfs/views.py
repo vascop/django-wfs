@@ -32,7 +32,7 @@ def global_handler(request, service_id):
 
         if low_key == "version":
             try:
-                version = map(int, value.split("."))
+                version = [int(x) for x in value.split(".")]
             except:
                 return wfs_exception(request, "VersionNegotiationFailed", "version", value)
             else:
