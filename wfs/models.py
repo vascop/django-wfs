@@ -1,9 +1,14 @@
+from __future__ import unicode_literals
+
 from django.db import models
 from django.core.urlresolvers import reverse
 from django.contrib.sites.models import Site
 from django.contrib.contenttypes.models import ContentType
 
+# See https://docs.djangoproject.com/en/1.9/topics/python3/#str-and-unicode-methods
+from django.utils.encoding import python_2_unicode_compatible
 
+@python_2_unicode_compatible
 class Service(models.Model):
     name = models.CharField(max_length=254)
     title = models.CharField(max_length=254)
@@ -18,10 +23,11 @@ class Service(models.Model):
     def get_absolute_url(self):
         return reverse('wfs', kwargs={'service_id': self.pk})
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
 
+@python_2_unicode_compatible
 class FeatureType(models.Model):
     service = models.ForeignKey(Service)
     name = models.CharField(max_length=254)
@@ -33,7 +39,7 @@ class FeatureType(models.Model):
     fields = models.CharField(max_length=254, null=True, blank=True)
     query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter()")
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
     def save(self, *args, **kwargs):
@@ -44,14 +50,16 @@ class FeatureType(models.Model):
         super(FeatureType, self).save(*args, **kwargs)
 
 
+@python_2_unicode_compatible
 class MetadataURL(models.Model):
     featuretype = models.ForeignKey(FeatureType)
     url = models.URLField()
 
-    def __unicode__(self):
+    def __str__(self):
         return self.url
 
 
+@python_2_unicode_compatible
 class BoundingBox(models.Model):
     featuretype = models.ForeignKey(FeatureType)
     minx = models.CharField(max_length=254)
@@ -59,5 +67,5 @@ class BoundingBox(models.Model):
     maxx = models.CharField(max_length=254)
     maxy = models.CharField(max_length=254)
 
-    def __unicode__(self):
-        return "((" + self.minx + ", ", self.miny + "), (" + self.maxx + ", " + self.maxy + "))"
+    def __str__(self):
+        return "((" + self.minx + ", " + self.miny + "), (" + self.maxx + ", " + self.maxy + "))"
