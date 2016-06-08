@@ -5,6 +5,7 @@ from django.contrib.gis.db.models.functions import AsGML
 from wfs.models import Service, FeatureType
 import json
 import logging
+from django.contrib.gis.db.models.aggregates import Extent
 
 log = logging.getLogger(__name__)
 
@@ -171,6 +172,10 @@ def getfeature(request, service):
     if bbox is not None:
         raise NotImplementedError
 
+    result_bbox=None
+    # A fallback value, if no features can be found
+    srs = "EPSG:4326"
+
     # If FeatureID is present we return every feature on the list of ID's
     if featureid is not None:
         
@@ -184,6 +189,7 @@ def getfeature(request, service):
                 return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
             try:
                 ft = service.featuretype_set.get(name=ftname)
+                srs = ft.srs
                 flter = json.loads(ft.query)
                 try:
                     geom_field = ft.find_first_geometry_field()
@@ -197,6 +203,18 @@ def getfeature(request, service):
                         objs = objs.filter(**flter)
                         
                     f = objs.filter(id=fid)
+
+                    bb_res = f.aggregate(Extent(geom_field))[geom_field+'__extent']
+
+                    if log.getEffectiveLevel() <= logging.DEBUG:
+                        log.debug("Bounding box for feature [%s] is [%s]"%(feature,bb_res))
+                    
+                    if result_bbox is None:
+                        result_bbox = bb_res
+                    else:
+                        result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
+                                      max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
+
                     feature_list.append((ft, f[0]))
                 except:
                     log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
@@ -211,6 +229,7 @@ def getfeature(request, service):
         for typen in typename.split(","):
             try:
                 ft = service.featuretype_set.get(name__iexact=typen)
+                srs = ft.srs
             except FeatureType.DoesNotExist:
                 return wfs_exception(request, "InvalidParameterValue", "typename", typen)
             try:
@@ -226,6 +245,17 @@ def getfeature(request, service):
                 else:
                     objs=objs.all()
 
+                bb_res = objs.aggregate(Extent(geom_field))[geom_field+'__extent']
+
+                if log.getEffectiveLevel() <= logging.DEBUG:
+                    log.debug("Bounding box for feature type [%s] is [%s]"%(typen,bb_res))
+
+                if result_bbox is None:
+                    result_bbox = bb_res
+                else:
+                    result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
+                                   max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
+
                 feature_list.add_type_with_features(ft,objs)
 
             except:
@@ -235,6 +265,11 @@ def getfeature(request, service):
         return wfs_exception(request, "MissingParameter", "typename")
 
     context['features'] = feature_list
+    context['bbox0'] = result_bbox[0]
+    context['bbox1'] = result_bbox[1]
+    context['bbox2'] = result_bbox[2]
+    context['bbox3'] = result_bbox[3]
+    context['srs'] = srs
     return render(request, 'getFeature.xml', context, content_type="text/xml")
 
 
