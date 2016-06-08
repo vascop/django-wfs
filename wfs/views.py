@@ -1,8 +1,12 @@
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.sites.models import Site
+from django.contrib.gis.db.models.functions import AsGML
 from wfs.models import Service, FeatureType
 import json
+import logging
+
+log = logging.getLogger(__name__)
 
 # xmllint --schema wfs/validation_schemas/WFS-capabilities.xsd
 # "http://localhost:8000/wfs/?SERVICE=WFS&REQUEST=GetCapabilities&VERSION=99.99.99&bbox=1.2,3,4.5,-7" --noout
@@ -169,9 +173,20 @@ def getfeature(request, service):
                 ft = service.featuretype_set.get(name=ftname)
                 flter = json.loads(ft.query)
                 try:
-                    f = ft.model.model_class().objects.filter(**flter).filter(id=fid).gml()
+                    geom_field = ft.find_first_geometry_field()
+                    if geom_field is None:
+                        return wfs_exception(request, "NoGeometryField", "feature")
+            
+                    flter = json.loads(ft.query)
+                    objs=ft.model.model_class().objects.annotate(gml=AsGML(geom_field))
+                    
+                    if flter:
+                        objs = objs.filter(**flter)
+                        
+                    f = objs.filter(id=fid)
                     feature_list.append((ft, f[0]))
                 except:
+                    log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
                     return wfs_exception(request, "MalformedJSONQuery", "query")
             except FeatureType.DoesNotExist:
                 return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
@@ -183,10 +198,22 @@ def getfeature(request, service):
             except FeatureType.DoesNotExist:
                 return wfs_exception(request, "InvalidParameterValue", "typename", typen)
             try:
+                geom_field = ft.find_first_geometry_field()
+                if geom_field is None:
+                    return wfs_exception(request, "NoGeometryField", "feature")
+            
                 flter = json.loads(ft.query)
-                for i in ft.model.model_class().objects.all().filter(**flter).gml():
+                objs=ft.model.model_class().objects.annotate(gml=AsGML(geom_field))
+                
+                if flter:
+                    objs = objs.filter(**flter)
+                else:
+                    objs=objs.all()
+
+                for i in objs:
                     feature_list.append((ft, i))
             except:
+                log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
                 return wfs_exception(request, "MalformedJSONQuery", "query")
     else:
         return wfs_exception(request, "MissingParameter", "typename")
@@ -215,6 +242,8 @@ def wfs_exception(request, code, locator, parameter=None):
         text = "No available WFS service with id '" + str(parameter) + "'."
     elif code == "MalformedJSONQuery":
         text = "The JSON query defined for this feature type is malformed."
+    elif code == "NoGeometryField":
+        text = "The feature does not reference at least one geometry field."
     elif code == "UnknownError":
         text = "Something went wrong."
 

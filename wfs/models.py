@@ -4,6 +4,7 @@ from django.db import models
 from django.core.urlresolvers import reverse
 from django.contrib.sites.models import Site
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.gis.db.models import GeometryField
 
 # See https://docs.djangoproject.com/en/1.9/topics/python3/#str-and-unicode-methods
 from django.utils.encoding import python_2_unicode_compatible
@@ -49,6 +50,12 @@ class FeatureType(models.Model):
                 self.fields = ""
         super(FeatureType, self).save(*args, **kwargs)
 
+    def find_first_geometry_field(self):
+        for col in self.fields.split(','):
+            field = self.model.model_class()._meta.get_field(col)
+            if field and hasattr(field, "geom_type"):
+                return col
+        return None
 
 @python_2_unicode_compatible
 class MetadataURL(models.Model):
