@@ -106,6 +106,17 @@ def describefeaturetype(request, service):
 
     return render(request, 'describeFeatureType.xml', context, content_type="text/xml")
 
+class type_feature_iter:
+    def __init__(self):
+        self.types_with_features = []
+    
+    def add_type_with_features(self,ftype,feature_iter):
+        self.types_with_features.append((ftype,feature_iter))
+    
+    def __iter__(self):
+        for ftype,feature_iter in self.types_with_features:
+            for feature in feature_iter:
+                yield ftype,feature
 
 def getfeature(request, service):
     context = {}
@@ -160,9 +171,11 @@ def getfeature(request, service):
     if bbox is not None:
         raise NotImplementedError
 
-    feature_list = []
     # If FeatureID is present we return every feature on the list of ID's
     if featureid is not None:
+        
+        feature_list = []
+        
         # we assume every feature is identified by its Featuretype name + its object ID like "name.id"
         for feature in featureid.split(","):
             try:
@@ -192,6 +205,9 @@ def getfeature(request, service):
                 return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
     # If FeatureID isn't present we rely on TypeName and return every feature present it the requested FeatureTypes
     elif typename is not None:
+        
+        feature_list = type_feature_iter()
+        
         for typen in typename.split(","):
             try:
                 ft = service.featuretype_set.get(name__iexact=typen)
@@ -210,15 +226,15 @@ def getfeature(request, service):
                 else:
                     objs=objs.all()
 
-                for i in objs:
-                    feature_list.append((ft, i))
+                feature_list.add_type_with_features(ft,objs)
+
             except:
                 log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
                 return wfs_exception(request, "MalformedJSONQuery", "query")
     else:
         return wfs_exception(request, "MissingParameter", "typename")
 
-    context['features'] = features_to_xml(feature_list)
+    context['features'] = feature_list
     return render(request, 'getFeature.xml', context, content_type="text/xml")
 
 
@@ -262,21 +278,6 @@ def featuretype_to_xml(featuretypes):
                     ft.xml += 'geometry" type="gml:PointPropertyType"/>'
                 else:
                     ft.xml += field.name + '" type="string"/>'
-
-
-def features_to_xml(feature_list):
-    for (ftype, feature) in feature_list:
-        feature.xml = ""
-        for field in feature._meta.fields:
-            if len(ftype.fields) == 0 or field.name in ftype.fields.split(","):
-                if hasattr(field, "geom_type"):
-                    if feature.gml:
-                        feature.xml += "<geometry>" + feature.gml + "</geometry>"
-                else:
-                    feature.xml += u"<{}>{}</{}>".format(field.name, getattr(feature, field.name), field.name)
-
-    return feature_list
-
 
 def get_feature_from_parameter(parameter):
     dot = 0

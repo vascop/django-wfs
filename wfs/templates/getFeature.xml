@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+{% load wfs_extras %}<?xml version="1.0" encoding="UTF-8"?>
 <wfs:FeatureCollection
    xmlns:wfs="http://www.opengis.net/wfs"
    xmlns:gml="http://www.opengis.net/gml"
@@ -9,7 +9,7 @@
       {% if feature.gml %}
         <gml:featureMember>
           <{{ ftype.name }} fid="{{ ftype.name }}.{{ feature.id }}">
-            {{ feature.xml|safe }}
+            {% gml_feature ftype feature %}
           </{{ ftype.name }}>
         </gml:featureMember>
       {% endif %}

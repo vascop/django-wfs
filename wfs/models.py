@@ -51,11 +51,17 @@ class FeatureType(models.Model):
         super(FeatureType, self).save(*args, **kwargs)
 
     def find_first_geometry_field(self):
-        for col in self.fields.split(','):
-            field = self.model.model_class()._meta.get_field(col)
-            if field and hasattr(field, "geom_type"):
-                return col
+        for field_name in self.fields.split(','):
+            if self.is_geom_field(field_name):
+                return field_name
         return None
+    
+    def get_model_field(self,field_name):
+        return self.model.model_class()._meta.get_field(field_name)
+
+    def is_geom_field(self,field_name):
+        field = self.get_model_field(field_name)
+        return field and hasattr(field, "geom_type")
 
 @python_2_unicode_compatible
 class MetadataURL(models.Model):
