@@ -4,7 +4,6 @@ from django.db import models
 from django.core.urlresolvers import reverse
 from django.contrib.sites.models import Site
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.gis.db.models import GeometryField
 
 # See https://docs.djangoproject.com/en/1.9/topics/python3/#str-and-unicode-methods
 from django.utils.encoding import python_2_unicode_compatible
