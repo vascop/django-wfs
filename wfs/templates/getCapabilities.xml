@@ -6,8 +6,8 @@
     {% endfor %}
     xmlns:ogc="http://www.opengis.net/ogc"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    version="1.0.0" 
-    xsi:schemaLocation="http://www.opengis.net/wfs http://geoserver.org/geoserver/schemas/wfs/1.0.0/WFS-capabilities.xsd">
+    version="1.1.0" 
+    xsi:schemaLocation="http://www.opengis.net/wfs http://geoserver.org/geoserver/schemas/wfs/1.1.0/WFS-capabilities.xsd">
 
     <Service>
         <Name>{{ service.name }}</Name>

@@ -12,6 +12,7 @@ class Test(TestCase):
         self.assertEqual(4258, CRS("urn:ogc:def:crs:epsg::4258").srid)
         self.assertEqual(4258, CRS("urn:opengis:def:crs:epsg::4258").srid)
         self.assertEqual(4326, CRS("urn:ogc:def:crs:OGC:1.3:CRS84").srid)
+        self.assertEqual("CRS84", CRS("urn:ogc:def:crs:OGC:1.3:CRS84").crsid)
         self.assertEqual(28992,CRS("urn:ogc:def:crs:EPSG:6.9:28992").srid)
         self.assertEqual(4326, CRS("urn:ogc:def:crs:EPSG:6.9:4326").srid)
         self.assertEqual(4326, CRS("urn:ogc:def:crs:EPSG:6.11:4326").srid)

@@ -110,3 +110,5 @@ class CRS:
         Equivalent to get_urn().
         '''
         return self.get_urn()
+
+WGS84_CRS = CRS(4326)

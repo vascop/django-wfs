@@ -1,11 +1,13 @@
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.sites.models import Site
-from django.contrib.gis.db.models.functions import AsGML
+from django.contrib.gis.db.models.functions import AsGML, Transform
+from django.contrib.gis.geos import Polygon
 from wfs.models import Service, FeatureType
 import json
 import logging
 from django.contrib.gis.db.models.aggregates import Extent
+from wfs.helpers import CRS, WGS84_CRS
 
 log = logging.getLogger(__name__)
 
@@ -128,6 +130,8 @@ def getfeature(request, service):
     featureid = None
     filtr = None
     bbox = None
+    # A fallback value, if no features can be found
+    crs = WGS84_CRS
 
     for key, value in request.GET.items():
         low_key = key.lower()
@@ -158,7 +162,44 @@ def getfeature(request, service):
             filtr = low_value
 
         if low_key == "bbox":
-            bbox = low_value
+            #
+            # See the following URL for all the gory details on the passed in bounding box:
+            #
+            # http://augusttown.blogspot.co.at/2010/08/mysterious-bbox-parameter-in-web.html
+            bbox_values = low_value.split(",")
+            
+            if len(bbox_values) != 4 and len(bbox_values) !=5:
+                return wfs_exception(request, "InvalidParameterValue", "bbox", value)
+            
+            try:
+                bbox_crs = CRS(bbox_values[4]) if len(bbox_values) == 5 else WGS84_CRS
+    
+                if bbox_crs.crsid == "CRS84":
+                    # we and GeoDjango operate in longitude/latitude mode, so ban CRS84
+                    bbox = Polygon.from_bbox((float(bbox_values[1]),float(bbox_values[0]),float(bbox_values[3]),float(bbox_values[2])))
+                    bbox_crs = WGS84_CRS
+                else:
+                    bbox = Polygon.from_bbox((float(bbox_values[0]),float(bbox_values[1]),float(bbox_values[2]),float(bbox_values[3])))
+                
+                bbox.set_srid(bbox_crs.srid)
+            except:
+                return wfs_exception(request, "InvalidParameterValue", "maxfeatures", value)
+
+        if low_key == "srsname":
+            try:
+                crs = CRS(low_value)
+    
+                if crs.crsid == "CRS84":
+                    # we and GeoDjango operate in longitude/latitude mode, so ban CRS84
+                    crs = WGS84_CRS
+
+            except:
+                return wfs_exception(request, "InvalidParameterValue", "maxfeatures", value)
+            
+
+        if low_key == "filter":
+            filtr = low_value
+        
 
     if propertyname is not None:
         raise NotImplementedError
@@ -173,8 +214,6 @@ def getfeature(request, service):
         raise NotImplementedError
 
     result_bbox=None
-    # A fallback value, if no features can be found
-    srs = "EPSG:4326"
 
     # If FeatureID is present we return every feature on the list of ID's
     if featureid is not None:
@@ -189,16 +228,21 @@ def getfeature(request, service):
                 return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
             try:
                 ft = service.featuretype_set.get(name=ftname)
-                srs = ft.srs
-                flter = json.loads(ft.query)
+                ft_crs = CRS(ft.srs)
                 try:
                     geom_field = ft.find_first_geometry_field()
                     if geom_field is None:
                         return wfs_exception(request, "NoGeometryField", "feature")
             
                     flter = json.loads(ft.query)
-                    objs=ft.model.model_class().objects.annotate(gml=AsGML(geom_field))
+                    objs=ft.model.model_class().objects
                     
+                    if crs.srid != ft_crs.srid:
+                        objs = objs.annotate(xform=Transform(geom_field,crs.srid))
+                        geom_field = "xform"
+
+                    objs = objs.annotate(gml=AsGML(geom_field))
+
                     if flter:
                         objs = objs.filter(**flter)
                         
@@ -229,7 +273,7 @@ def getfeature(request, service):
         for typen in typename.split(","):
             try:
                 ft = service.featuretype_set.get(name__iexact=typen)
-                srs = ft.srs
+                ft_crs = CRS(ft.srs)
             except FeatureType.DoesNotExist:
                 return wfs_exception(request, "InvalidParameterValue", "typename", typen)
             try:
@@ -238,8 +282,15 @@ def getfeature(request, service):
                     return wfs_exception(request, "NoGeometryField", "feature")
             
                 flter = json.loads(ft.query)
-                objs=ft.model.model_class().objects.annotate(gml=AsGML(geom_field))
                 
+                objs=ft.model.model_class().objects
+
+                if crs.srid != ft_crs.srid:
+                    objs = objs.annotate(xform=Transform(geom_field,crs.srid))
+                    geom_field = "xform"
+
+                objs = objs.annotate(gml=AsGML(geom_field))
+
                 if flter:
                     objs = objs.filter(**flter)
                 else:
@@ -269,7 +320,7 @@ def getfeature(request, service):
     context['bbox1'] = result_bbox[1]
     context['bbox2'] = result_bbox[2]
     context['bbox3'] = result_bbox[3]
-    context['srs'] = srs
+    context['crs'] = crs
     return render(request, 'getFeature.xml', context, content_type="text/xml")
 
 
