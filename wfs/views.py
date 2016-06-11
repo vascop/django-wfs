@@ -1,13 +1,14 @@
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.sites.models import Site
-from django.contrib.gis.db.models.functions import AsGML, Transform
+from django.contrib.gis.db.models.functions import AsGML, Transform, AsGeoJSON
 from django.contrib.gis.geos import Polygon
 from wfs.models import Service, FeatureType
 import json
 import logging
 from django.contrib.gis.db.models.aggregates import Extent
 from wfs.helpers import CRS, WGS84_CRS
+from django.http.response import StreamingHttpResponse
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +122,64 @@ class type_feature_iter:
             for feature in feature_iter:
                 yield ftype,feature
 
+
+class GeoJsonIterator:
+    '''
+        This iterator renders a coordinate reference System, a bounding box and
+        an iterator returning pairs for FeatureType and GeoJson Features in the following
+        format::
+        
+            {"type": "FeatureCollection",
+             "totalFeatures": 98,
+             "bbox": [-8935094.49, 5372483.33, -8881826.36, 5395217.69]
+             "crs":  {type: "name", properties: {name: "urn:ogc:def:crs:EPSG::3857"}}
+             "features": [
+               {"type": "Feature",
+                "id": "water_areas.2381",
+                "geometry": {type: "Polygon",…},
+                "properties": {"name":"gallaway creek","ref_id":1252,… },
+               …]
+            }
+
+        :ivar crs: The coordinate reference system to be included in the response.
+        :ivar bbox: The bounding box tuple of 4 numbers to be included in the response.
+        :ivar feature_iter: An iterator returning a pair (FeatureType,Feature) of the
+                            features to be rendere in the response.
+    '''
+    
+    def __init__(self,crs,bbox,feature_iter):
+        self.crs=crs
+        self.bbox = bbox
+        self.feature_iter = feature_iter
+        
+    def __iter__(self):
+        
+        yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(str(self.crs)),json.dumps(self.bbox))
+        
+        nfeatures = 0
+        sep = ""
+        
+        for ftype,feature in self.feature_iter:
+            
+            props = {}
+            geometry = None
+            
+            for field_name in ftype.fields.split(","):
+                if field_name:
+                    field = ftype.get_model_field(field_name)
+                if field:
+                    if hasattr(field, "geom_type"):
+                        if feature.geojson:
+                            geometry = feature.geojson
+                    else:
+                        props[field.name] = getattr(feature, field.name)
+
+            yield '%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(sep,json.dumps("%s.%d"%(ftype.name,feature.id)),geometry,json.dumps(props))
+            sep = ","
+            nfeatures += 1
+        
+        yield '],"totalFeatures":%d}'%nfeatures
+
 def getfeature(request, service):
     context = {}
     propertyname = None
@@ -130,6 +189,8 @@ def getfeature(request, service):
     featureid = None
     filtr = None
     bbox = None
+    outputFormat = None
+    
     # A fallback value, if no features can be found
     crs = WGS84_CRS
 
@@ -200,6 +261,8 @@ def getfeature(request, service):
         if low_key == "filter":
             filtr = low_value
         
+        if low_key == "outputformat":
+            outputFormat = low_value
 
     if propertyname is not None:
         raise NotImplementedError
@@ -241,7 +304,10 @@ def getfeature(request, service):
                         objs = objs.annotate(xform=Transform(geom_field,crs.srid))
                         geom_field = "xform"
 
-                    objs = objs.annotate(gml=AsGML(geom_field))
+                    if outputFormat == "application/json":
+                        objs = objs.annotate(geojson=AsGeoJSON(geom_field))
+                    else:
+                        objs = objs.annotate(gml=AsGML(geom_field))
 
                     if flter:
                         objs = objs.filter(**flter)
@@ -289,7 +355,10 @@ def getfeature(request, service):
                     objs = objs.annotate(xform=Transform(geom_field,crs.srid))
                     geom_field = "xform"
 
-                objs = objs.annotate(gml=AsGML(geom_field))
+                if outputFormat == "application/json":
+                    objs = objs.annotate(geojson=AsGeoJSON(geom_field))
+                else:
+                    objs = objs.annotate(gml=AsGML(geom_field))
 
                 if flter:
                     objs = objs.filter(**flter)
@@ -315,13 +384,18 @@ def getfeature(request, service):
     else:
         return wfs_exception(request, "MissingParameter", "typename")
 
-    context['features'] = feature_list
-    context['bbox0'] = result_bbox[0]
-    context['bbox1'] = result_bbox[1]
-    context['bbox2'] = result_bbox[2]
-    context['bbox3'] = result_bbox[3]
-    context['crs'] = crs
-    return render(request, 'getFeature.xml', context, content_type="text/xml")
+    if outputFormat == "application/json":
+        
+        return StreamingHttpResponse(streaming_content=GeoJsonIterator(crs,result_bbox,feature_list),content_type="application/json")
+        
+    else:
+        context['features'] = feature_list
+        context['bbox0'] = result_bbox[0]
+        context['bbox1'] = result_bbox[1]
+        context['bbox2'] = result_bbox[2]
+        context['bbox3'] = result_bbox[3]
+        context['crs'] = crs
+        return render(request, 'getFeature.xml', context, content_type="text/xml")
 
 
 def wfs_exception(request, code, locator, parameter=None):

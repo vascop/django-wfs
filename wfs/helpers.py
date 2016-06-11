@@ -20,10 +20,28 @@ DEFAULT_EPSG_VERSION="6.9"
 
 @python_2_unicode_compatible
 class CRS:
+    '''
+    Represents a CRS (Coordinate Reference System), which preferably follows the URN format
+    as specified by `the OGC consortium`_.
+
+    .. _the OGC consortium: http://www.opengeospatial.org/ogcUrnPolicy
+    
+    :ivar domain: Either "ogc" or "opengis", whereas "ogc" is highly recommended.
+    :ivar authority: Either "OGC" or "EPSG".
+    :ivar version: The version of the authorities' SRS registry, which is empty
+                or contains two or three numeric components separatedby dots like
+                "6.9" or "6.11.9".
+    :ivar crsid: A string representation of tje coordinate system reference ID.
+                For OGC, only "CRS84" is supported as crsid. For EPSG, this is the
+                string formatted CRSID.
+    :ivar srid: The integer representing the numeric spatial reference ID as
+                used by the EPSG and GIS database backends.
+    '''
+
     def __init__(self,uri):
         '''
         Parse an CRS (Coordinate Reference System) URI, which preferably follows the URN format
-        as specified by `the OGC consortium`_.
+        as specified by `the OGC consortium`_ and construct a new CRS instance.
     
         .. _the OGC consortium: http://www.opengeospatial.org/ogcUrnPolicy
         
@@ -31,17 +49,6 @@ class CRS:
                     instance repreenting a numeric SRID may also passed in,
                     which is equivalent to specifyin  an URN in the format
                     "urn:ogc:def:crs:EPSG:6.9:<SRID>" 
-        
-        :ivar domain: Either "ogc" or "opengis", whereas "ogc" is highly recommended.
-        :ivar authority: Either "OGC" or "EPSG".
-        :ivar version: The version of the authorities' SRS registry, which is empty
-                    or contains two or three numeric components separatedby dots like
-                    "6.9" or "6.11.9".
-        :ivar crsid: A string representation of tje coordinate system reference ID.
-                    For OGC, only "CRS84" is supported as crsid. For EPSG, this is the
-                    string formatted CRSID.
-        :ivar srid: The integer representing the numeric spatial reference ID as
-                    used by the EPSG and GIS database backends.
         '''
         try:
             legacy_found = False
