@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<schema
+<xsd:schema
     xmlns:ogc="http://www.opengis.net/ogc"
     xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    xmlns="http://www.w3.org/2001/XMLSchema"
-    xmlns:gml="http://www.opengis.net/gml">
+    xmlns:gml="http://www.opengis.net/gml"
+    xmlns:wfs="http://www.opengis.net/wfs">
 
-<import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/{{ gml_path }}"/>
+<xsd:import namespace="http://www.opengis.net/wfs" schemaLocation="http://schemas.opengis.net/wfs/{{version}}/wfs.xsd"/>    	
+<xsd:import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/{{ gml_path }}"/>
 
 {% for featuretype in featuretypes %}
-<element name="{{ featuretype.name }}" type="{{ featuretype.name }}" substitutionGroup="gml:_Feature"/>
-<complexType name="{{ featuretype.name }}">
-    <complexContent>
-        <extension base="gml:AbstractFeatureType">
-            <sequence>
+<xsd:element name="{{ featuretype.name }}" type="{{ featuretype.name }}" substitutionGroup="gml:_Feature"/>
+<xsd:complexType name="{{ featuretype.name }}">
+    <xsd:complexContent>
+        <xsd:extension base="gml:AbstractFeatureType">
+            <xsd:sequence>
                 {{ featuretype.xml|safe }}
-            </sequence>
-        </extension>
-    </complexContent>
-</complexType>
+            </xsd:sequence>
+        </xsd:extension>
+    </xsd:complexContent>
+</xsd:complexType>
 {% endfor %}
-</schema>
+</xsd:schema>

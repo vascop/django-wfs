@@ -1,6 +1,5 @@
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.sites.models import Site
 from django.contrib.gis.db.models.functions import AsGML, Transform, AsGeoJSON
 from django.contrib.gis.geos import Polygon
 from wfs.models import Service, FeatureType
@@ -40,12 +39,12 @@ def global_handler(request, service_id):
             if request_type not in available_requests:
                 return wfs_exception(request, "InvalidRequest", "request", value)
 
-        if low_key == "version":
+        elif low_key == "version":
             if value != "1.0.0" and value != "1.1.0":
                 return wfs_exception(request, "VersionNegotiationFailed", "version", value)
             wfs_version = value
 
-        if low_key == "service":
+        elif low_key == "service":
             service = low_value
             if service not in available_services:
                 return wfs_exception(request, "InvalidService", "service", service)
@@ -69,7 +68,6 @@ def global_handler(request, service_id):
 def getcapabilities(request, service,wfs_version):
     context = {}
     context['service'] = service
-    context['namespaces'] = [Site.objects.get_current()]
     context['version'] = wfs_version
     context['wfs_path'] = "1.0.0/WFS-capabilities.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"
 
@@ -90,7 +88,7 @@ def describefeaturetype(request, service,wfs_version):
         if low_key == "typename":
             typename = value
 
-        if low_key == "outputformat":
+        elif low_key == "outputformat":
             outputformat = low_value
             if outputformat not in available_formats:
                 return wfs_exception(request, "InvalidParameterValue", "outputformat", value)
@@ -191,6 +189,12 @@ class GeoJsonIterator:
         
         yield '],"totalFeatures":%d}'%nfeatures
 
+XML_OUTPUT_FORMAT = "application/gml+xml"
+ALL_XML_OUTPUT_FORMATS = ( XML_OUTPUT_FORMAT, "application/xml", "text/xml", "xml", "gml" )
+
+JSON_OUTPUT_FORMAT = "application/json"
+ALL_JSON_OUTPUT_FORMATS = ( JSON_OUTPUT_FORMAT, "json" )
+
 def getfeature(request, service,wfs_version):
     context = {}
     propertyname = None
@@ -213,10 +217,10 @@ def getfeature(request, service,wfs_version):
         if low_key == "propertyname":
             propertyname = low_value
 
-        if low_key == "featureversion":
+        elif low_key == "featureversion":
             featureversion = low_value
 
-        if low_key == "maxfeatures":
+        elif low_key == "maxfeatures":
             try:
                 maxfeatures = int(low_value)
             except:
@@ -225,16 +229,16 @@ def getfeature(request, service,wfs_version):
                 if maxfeatures < 1:
                     return wfs_exception(request, "InvalidParameterValue", "maxfeatures", value)
 
-        if low_key == "typename":
+        elif low_key == "typename":
             typename = low_value
 
-        if low_key == "featureid":
+        elif low_key == "featureid":
             featureid = low_value
 
-        if low_key == "filter":
+        elif low_key == "filter":
             filtr = low_value
 
-        if low_key == "bbox":
+        elif low_key == "bbox":
             #
             # See the following URL for all the gory details on the passed in bounding box:
             #
@@ -260,7 +264,7 @@ def getfeature(request, service,wfs_version):
             except:
                 return wfs_exception(request, "InvalidParameterValue", "maxfeatures", value)
 
-        if low_key == "srsname":
+        elif low_key == "srsname":
             try:
                 crs = CRS(low_value)
     
@@ -275,11 +279,17 @@ def getfeature(request, service,wfs_version):
             if bbox and not bbox_has_crs:
                 bbox.set_srid(crs.srid)
 
-        if low_key == "filter":
+        elif low_key == "filter":
             filtr = low_value
         
-        if low_key == "outputformat":
-            outputFormat = low_value
+        elif low_key == "outputformat":
+            
+            if low_value in ALL_JSON_OUTPUT_FORMATS:
+                outputFormat = JSON_OUTPUT_FORMAT
+            elif low_value in ALL_XML_OUTPUT_FORMATS:
+                outputFormat = XML_OUTPUT_FORMAT
+            else:
+                return wfs_exception(request, "InvalidParameterValue", "outputformat", value)
 
     if propertyname is not None:
         raise NotImplementedError
@@ -322,7 +332,7 @@ def getfeature(request, service,wfs_version):
                         objs = objs.annotate(xform=Transform(geom_field,crs.srid))
                         geom_field = "xform"
 
-                    if outputFormat == "application/json":
+                    if outputFormat == JSON_OUTPUT_FORMAT:
                         objs = objs.annotate(geojson=AsGeoJSON(geom_field))
                     else:
                         objs = objs.annotate(gml=AsGML(geom_field))
@@ -377,7 +387,7 @@ def getfeature(request, service,wfs_version):
                     objs = objs.annotate(xform=Transform(geom_field,crs.srid))
                     geom_field = "xform"
 
-                if outputFormat == "application/json":
+                if outputFormat == JSON_OUTPUT_FORMAT:
                     objs = objs.annotate(geojson=AsGeoJSON(geom_field))
                 else:
                     objs = objs.annotate(gml=AsGML(geom_field))
@@ -406,7 +416,7 @@ def getfeature(request, service,wfs_version):
     else:
         return wfs_exception(request, "MissingParameter", "typename")
 
-    if outputFormat == "application/json":
+    if outputFormat == JSON_OUTPUT_FORMAT:
         
         return StreamingHttpResponse(streaming_content=GeoJsonIterator(crs,result_bbox,feature_list),content_type="application/json")
         
@@ -471,13 +481,13 @@ def featuretype_to_xml(featuretypes):
         fields = ft.model.model_class()._meta.fields
         for field in fields:
             if len(ft.fields) == 0 or field.name in ft.fields.split(","):
-                ft.xml += '<element name="'
+                ft.xml += '<xsd:element name="'
                 if hasattr(field, "geom_type"):
                     
                     gmlType = GML_GEOTYPES.get(field.geom_type,"gml:PointPropertyType")
                     ft.xml += 'geometry" type="%s"/>' % gmlType
                 else:
-                    ft.xml += field.name + '" type="string"/>'
+                    ft.xml += field.name + '" type="xsd:string"/>'
 
 def get_feature_from_parameter(parameter):
     dot = 0
