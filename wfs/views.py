@@ -273,9 +273,6 @@ def getfeature(request, service):
     if filtr is not None:
         raise NotImplementedError
 
-    if bbox is not None:
-        raise NotImplementedError
-
     result_bbox=None
 
     # If FeatureID is present we return every feature on the list of ID's
@@ -299,6 +296,10 @@ def getfeature(request, service):
             
                     flter = json.loads(ft.query)
                     objs=ft.model.model_class().objects
+
+                    if bbox:
+                        bbox_args = { geom_field+"__bboverlaps":bbox }
+                        objs=objs.filter(**bbox_args)
                     
                     if crs.srid != ft_crs.srid:
                         objs = objs.annotate(xform=Transform(geom_field,crs.srid))
@@ -350,6 +351,10 @@ def getfeature(request, service):
                 flter = json.loads(ft.query)
                 
                 objs=ft.model.model_class().objects
+
+                if bbox:
+                    bbox_args = { geom_field+"__bboverlaps":bbox }
+                    objs=objs.filter(**bbox_args)
 
                 if crs.srid != ft_crs.srid:
                     objs = objs.annotate(xform=Transform(geom_field,crs.srid))
