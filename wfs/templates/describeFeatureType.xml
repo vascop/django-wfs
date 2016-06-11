@@ -5,7 +5,7 @@
     xmlns="http://www.w3.org/2001/XMLSchema"
     xmlns:gml="http://www.opengis.net/gml">
 
-<import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/2.1.2/feature.xsd"/>
+<import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/{{ gml_path }}"/>
 
 {% for featuretype in featuretypes %}
 <element name="{{ featuretype.name }}" type="{{ featuretype.name }}" substitutionGroup="gml:_Feature"/>

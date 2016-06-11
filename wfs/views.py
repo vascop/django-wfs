@@ -9,6 +9,7 @@ import logging
 from django.contrib.gis.db.models.aggregates import Extent
 from wfs.helpers import CRS, WGS84_CRS
 from django.http.response import StreamingHttpResponse
+import decimal
 
 log = logging.getLogger(__name__)
 
@@ -19,10 +20,11 @@ log = logging.getLogger(__name__)
 @csrf_exempt
 def global_handler(request, service_id):
     request_type = None
-    version = None
     service = None
     available_requests = ("getcapabilities", "describefeaturetype", "getfeature")
     available_services = ("wfs",)
+
+    wfs_version = "1.1.0"
 
     try:
         wfs = Service.objects.get(id=service_id)
@@ -39,13 +41,9 @@ def global_handler(request, service_id):
                 return wfs_exception(request, "InvalidRequest", "request", value)
 
         if low_key == "version":
-            try:
-                version = [int(x) for x in value.split(".")]
-            except:
+            if value != "1.0.0" and value != "1.1.0":
                 return wfs_exception(request, "VersionNegotiationFailed", "version", value)
-            else:
-                if len(version) != 3:
-                    return wfs_exception(request, "VersionNegotiationFailed", "version", value)
+            wfs_version = value
 
         if low_key == "service":
             service = low_value
@@ -59,26 +57,28 @@ def global_handler(request, service_id):
         return wfs_exception(request, "MissingParameter", "service")
 
     if request_type == "getcapabilities":
-        return getcapabilities(request, wfs)
+        return getcapabilities(request, wfs,wfs_version)
     elif request_type == "describefeaturetype":
-        return describefeaturetype(request, wfs)
+        return describefeaturetype(request, wfs,wfs_version)
     elif request_type == "getfeature":
-        return getfeature(request, wfs)
+        return getfeature(request, wfs,wfs_version)
 
     return wfs_exception(request, "UnknownError", "")
 
 
-def getcapabilities(request, service):
+def getcapabilities(request, service,wfs_version):
     context = {}
     context['service'] = service
     context['namespaces'] = [Site.objects.get_current()]
+    context['version'] = wfs_version
+    context['wfs_path'] = "1.0.0/WFS-capabilities.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"
 
     return render(request, 'getCapabilities.xml', context, content_type="text/xml")
 
 
 # PostgreSQL generate xml schema
 # SELET * FROM table_to_xml(tbl regclass, nulls boolean, tableforest boolean, targetns text)
-def describefeaturetype(request, service):
+def describefeaturetype(request, service,wfs_version):
     typename = None
     outputformat = None
     available_formats = ("xmlschema",)
@@ -107,6 +107,8 @@ def describefeaturetype(request, service):
 
     context = {}
     context['featuretypes'] = ft
+    context['version'] = wfs_version
+    context['gml_path'] = "2.1.2/feature.xsd" if wfs_version == "1.0.0" else "3.1.1/base/gml.xsd"
 
     return render(request, 'describeFeatureType.xml', context, content_type="text/xml")
 
@@ -122,6 +124,12 @@ class type_feature_iter:
             for feature in feature_iter:
                 yield ftype,feature
 
+class DecimalEncoder(json.JSONEncoder):
+    
+    def default(self,o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        return super(DecimalEncoder,self).default(o)
 
 class GeoJsonIterator:
     '''
@@ -174,13 +182,16 @@ class GeoJsonIterator:
                     else:
                         props[field.name] = getattr(feature, field.name)
 
-            yield '%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(sep,json.dumps("%s.%d"%(ftype.name,feature.id)),geometry,json.dumps(props))
+            yield '%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(
+                            sep,json.dumps("%s.%d"%(ftype.name,feature.id)),
+                            geometry,
+                            json.dumps(props,cls=DecimalEncoder))
             sep = ","
             nfeatures += 1
         
         yield '],"totalFeatures":%d}'%nfeatures
 
-def getfeature(request, service):
+def getfeature(request, service,wfs_version):
     context = {}
     propertyname = None
     featureversion = None
@@ -189,6 +200,7 @@ def getfeature(request, service):
     featureid = None
     filtr = None
     bbox = None
+    bbox_has_crs = False
     outputFormat = None
     
     # A fallback value, if no features can be found
@@ -229,11 +241,13 @@ def getfeature(request, service):
             # http://augusttown.blogspot.co.at/2010/08/mysterious-bbox-parameter-in-web.html
             bbox_values = low_value.split(",")
             
-            if len(bbox_values) != 4 and len(bbox_values) !=5:
+            if len(bbox_values) != 4 and (wfs_version == "1.0.0" or len(bbox_values) !=5):
                 return wfs_exception(request, "InvalidParameterValue", "bbox", value)
             
             try:
-                bbox_crs = CRS(bbox_values[4]) if len(bbox_values) == 5 else WGS84_CRS
+                bbox_has_crs =  len(bbox_values) == 5
+                
+                bbox_crs = CRS(bbox_values[4]) if bbox_has_crs else crs
     
                 if bbox_crs.crsid == "CRS84":
                     # we and GeoDjango operate in longitude/latitude mode, so ban CRS84
@@ -257,6 +271,9 @@ def getfeature(request, service):
             except:
                 return wfs_exception(request, "InvalidParameterValue", "maxfeatures", value)
             
+            # This is for the case, that srsname is hit after the bbox parameter above
+            if bbox and not bbox_has_crs:
+                bbox.set_srid(crs.srid)
 
         if low_key == "filter":
             filtr = low_value
@@ -400,6 +417,8 @@ def getfeature(request, service):
         context['bbox2'] = result_bbox[2]
         context['bbox3'] = result_bbox[3]
         context['crs'] = crs
+        context['version'] = wfs_version
+        context['wfs_path'] = "1.0.0/WFS-basic.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"
         return render(request, 'getFeature.xml', context, content_type="text/xml")
 
 
@@ -431,6 +450,20 @@ def wfs_exception(request, code, locator, parameter=None):
     context['text'] = text
     return render(request, 'exception.xml', context, content_type="text/xml")
 
+#
+# This list a synthesis of this geomtry type in
+#   http://schemas.opengis.net/gml/2.1.2/feature.xsd
+# and
+#   http://www.opengeospatial.org/standards/sfs
+#
+GML_GEOTYPES = { 'POINT':           'gml:PointPropertyType',
+                 'LINESTRING':      'gml:LineStringPropertyType',
+                 'POLYGON':         'gml:PolygonPropertyType',
+                 'MULTIPOINT':      'gml:MultiPointPropertyType',
+                 'MULTILINESTRING': 'gml:MultiLineStringPropertyType',
+                 'MULTIPOLYGON':    'gml:MultiPolygonPropertyType',
+                 'GEOMCOLLECTION':  'gml:MultiGeometryPropertyType',
+                }
 
 def featuretype_to_xml(featuretypes):
     for ft in featuretypes:
@@ -440,7 +473,9 @@ def featuretype_to_xml(featuretypes):
             if len(ft.fields) == 0 or field.name in ft.fields.split(","):
                 ft.xml += '<element name="'
                 if hasattr(field, "geom_type"):
-                    ft.xml += 'geometry" type="gml:PointPropertyType"/>'
+                    
+                    gmlType = GML_GEOTYPES.get(field.geom_type,"gml:PointPropertyType")
+                    ft.xml += 'geometry" type="%s"/>' % gmlType
                 else:
                     ft.xml += field.name + '" type="string"/>'
 
