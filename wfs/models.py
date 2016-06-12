@@ -18,7 +18,14 @@ class Service(models.Model):
     access_constraints = models.CharField(null=True, blank=True, max_length=254)
 
     def online_resource(self):
-        return 'http://%s%s' % (Site.objects.get_current().domain, self.get_absolute_url())
+        
+        domain = Site.objects.get_current().domain
+        
+        if "://" in domain:
+            # allow the configuration of https:// URL in the site plugin.
+            return domain + self.get_absolute_url()
+        else:
+            return 'http://%s%s' % (domain, self.get_absolute_url())
 
     def get_absolute_url(self):
         return reverse('wfs', kwargs={'service_id': self.pk})

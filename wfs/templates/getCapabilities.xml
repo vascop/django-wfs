@@ -22,12 +22,12 @@
             <GetCapabilities>
                 <DCPType>
                     <HTTP>
-                        <Get onlineResource="{{ service.onlineresource }}?request=GetCapabilities"/>
+                        <Get onlineResource="{{ service.online_resource }}?request=GetCapabilities"/>
                     </HTTP>
                 </DCPType>
                 <DCPType>
                     <HTTP>
-                        <Post onlineResource="{{ service.onlineresource }}"/>
+                        <Post onlineResource="{{ service.online_resource }}"/>
                     </HTTP>
                 </DCPType>
             </GetCapabilities>
@@ -38,12 +38,12 @@
                 </SchemaDescriptionLanguage>
                 <DCPType>
                     <HTTP>
-                        <Get onlineResource="{{ service.onlineresource }}?request=DescribeFeatureType"/>
+                        <Get onlineResource="{{ service.online_resource }}?request=DescribeFeatureType"/>
                     </HTTP>
                 </DCPType>
                 <DCPType>
                     <HTTP>
-                        <Post onlineResource="{{ service.onlineresource }}"/>
+                        <Post onlineResource="{{ service.online_resource }}"/>
                     </HTTP>
                 </DCPType>
             </DescribeFeatureType>
@@ -54,12 +54,12 @@
                 </ResultFormat>
                 <DCPType>
                     <HTTP>
-                        <Get onlineResource="{{ service.onlineresource }}?request=GetFeature"/>
+                        <Get onlineResource="{{ service.online_resource }}?request=GetFeature"/>
                    </HTTP>
                 </DCPType>
                 <DCPType>
                     <HTTP>
-                        <Post onlineResource="{{ service.onlineresource }}"/>
+                        <Post onlineResource="{{ service.online_resource }}"/>
                     </HTTP>
                 </DCPType>
             </GetFeature>
