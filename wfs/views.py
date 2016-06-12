@@ -168,7 +168,7 @@ class GeoJsonIterator:
             {"type": "FeatureCollection",
              "totalFeatures": 98,
              "bbox": [-8935094.49, 5372483.33, -8881826.36, 5395217.69]
-             "crs":  {type: "name", properties: {name: "urn:ogc:def:crs:EPSG::3857"}}
+             "crs":  {type: "name", properties: {name: "EPSG:3857"}}
              "features": [
                {"type": "Feature",
                 "id": "water_areas.2381",
@@ -190,7 +190,7 @@ class GeoJsonIterator:
         
     def __iter__(self):
         
-        yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(str(self.crs)),json.dumps(self.bbox))
+        yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(self.crs.get_legacy()),json.dumps(self.bbox))
         
         nfeatures = 0
         sep = ""

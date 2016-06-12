@@ -106,6 +106,12 @@ class CRS:
         except ValueError:
             raise SyntaxError("CRS URI [%s] contains an alphanumeric string where an SRID number is expected."%uri)            
     
+    def get_legacy(self):
+        '''
+        Return a legacy string in the format "EPSG:<srid>"
+        '''
+        return "EPSG:%d" % self.srid
+    
     def get_urn(self):
         '''
         :return: The OGC URN corresponding to this CRS.
