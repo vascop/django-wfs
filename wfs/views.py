@@ -9,6 +9,7 @@ from django.contrib.gis.db.models.aggregates import Extent
 from wfs.helpers import CRS, WGS84_CRS
 from django.http.response import StreamingHttpResponse
 import decimal
+import re
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,16 @@ def global_handler(request, service_id):
 
     return wfs_exception(request, "UnknownError", "")
 
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split('(\\d+)', text) ]
 
 def getcapabilities(request, service,wfs_version):
     context = {}
@@ -71,7 +82,26 @@ def getcapabilities(request, service,wfs_version):
     context['version'] = wfs_version
     context['wfs_path'] = "1.0.0/WFS-capabilities.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"
 
-    return render(request, 'getCapabilities.xml', context, content_type="text/xml")
+    if wfs_version != "1.0.0":
+        
+        featuretypes = service.featuretype_set.all()
+    
+        allsrs = set()
+        
+        for featuretype in featuretypes:
+            
+            allsrs.add(featuretype.srs)
+            
+            for srs in featuretype.get_other_srs_names():
+                allsrs.add(srs)
+        
+        allsrsnames = list(allsrs)
+        allsrsnames.sort(key=natural_keys)
+        context['allsrs'] = allsrsnames
+        context['keywords'] = service.get_keywords_list()
+        return render(request, 'getCapabilities-1-1.xml', context, content_type="text/xml")
+    else:   
+        return render(request, 'getCapabilities.xml', context, content_type="text/xml")
 
 
 # PostgreSQL generate xml schema

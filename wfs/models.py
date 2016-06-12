@@ -8,6 +8,23 @@ from django.contrib.contenttypes.models import ContentType
 # See https://docs.djangoproject.com/en/1.9/topics/python3/#str-and-unicode-methods
 from django.utils.encoding import python_2_unicode_compatible
 
+import re
+
+def split_comma_separated(value):
+    '''
+    Split a comma-separated list of words from a comma-separated database
+    field value. The members of the returned list have leading and trailing
+    whitespace stripped.
+    
+    :param value: A comma separated database field value.
+    '''
+    s = value.strip()
+    if s:
+        return re.split("\\s*,\\s*",s)
+    else:
+        return []
+  
+
 @python_2_unicode_compatible
 class Service(models.Model):
     name = models.CharField(max_length=254)
@@ -30,6 +47,13 @@ class Service(models.Model):
     def get_absolute_url(self):
         return reverse('wfs', kwargs={'service_id': self.pk})
 
+    def get_keywords_list(self):
+        '''
+        :return: A list of keywords as parsed from
+                 the comma-separated member 'keywords'. 
+        '''
+        return split_comma_separated(self.keywords)
+        
     def __str__(self):
         return self.name
 
@@ -42,6 +66,8 @@ class FeatureType(models.Model):
     keywords = models.CharField(null=True, blank=True, max_length=254)
     abstract = models.TextField(null=True, blank=True)
     srs = models.CharField(max_length=254, default="EPSG:4326")
+    othersrs = models.CharField(max_length=1020, default="EPSG:3857",null=True, blank=True,
+                                help_text='Comma separated list of alternative Spatial Reference Systems to which database-persisted coordinates may be transformed.')
     model = models.ForeignKey(ContentType)
     fields = models.CharField(max_length=254, null=True, blank=True)
     query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter()")
@@ -62,6 +88,20 @@ class FeatureType(models.Model):
                 return field_name
         return None
     
+    def get_other_srs_names(self):
+        '''
+        :return: A list of alternative spatial reference systems as parsed from
+                 the comma-separated member 'othersrs'. 
+        '''
+        return split_comma_separated(self.othersrs)
+    
+    def get_keywords_list(self):
+        '''
+        :return: A list of keywords as parsed from
+                 the comma-separated member 'keywords'. 
+        '''
+        return split_comma_separated(self.keywords)
+
     def get_model_field(self,field_name):
         return self.model.model_class()._meta.get_field(field_name)
 
