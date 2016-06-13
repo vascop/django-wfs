@@ -29,9 +29,9 @@ class CRS:
     :ivar domain: Either "ogc" or "opengis", whereas "ogc" is highly recommended.
     :ivar authority: Either "OGC" or "EPSG".
     :ivar version: The version of the authorities' SRS registry, which is empty
-                or contains two or three numeric components separatedby dots like
+                or contains two or three numeric components separated by dots like
                 "6.9" or "6.11.9".
-    :ivar crsid: A string representation of tje coordinate system reference ID.
+    :ivar crsid: A string representation of the coordinate system reference ID.
                 For OGC, only "CRS84" is supported as crsid. For EPSG, this is the
                 string formatted CRSID.
     :ivar srid: The integer representing the numeric spatial reference ID as
