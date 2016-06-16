@@ -1,0 +1,25 @@
+Source: django-wfs
+Section: devel
+Priority: extra
+Maintainer: Wolfgang Glas <wolfgang.glas@iteg.at>
+Build-Depends: cdbs, debhelper (>= 9), dh-python, python3-all, python3-all-dbg, python3-setuptools, python-all, python-all-dbg, python-setuptools
+XBCS-PBA-Category: xpkg
+XBCS-PBA-Generation: 1
+XBCS-PBA-Distributions: any
+XBCS-PBA-Repositories: deb.clazzes.org
+
+Package: python-django-wfs
+Architecture: all
+Priority: extra
+Depends: python-django, ${python:Depends},
+    ${misc:Depends},
+	${shlibs:Depends}
+Description: Django-wfs python library packaged for python2.
+
+Package: python3-django-wfs
+Architecture: all
+Priority: extra
+Depends: python3-django, ${python3:Depends},
+    ${misc:Depends},
+	${shlibs:Depends}
+Description: Django-wfs python library packaged for python3.

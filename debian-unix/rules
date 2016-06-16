@@ -1,0 +1,26 @@
+#!/usr/bin/make -f
+#
+# $Id: rules 14 2016-06-16 11:26:41Z xpkg $
+#
+# rules file for creating debian packages
+#
+
+DEB_DH_ALWAYS_EXCLUDE := .svn
+
+srcdir = $(shell pwd)/src
+
+package = django-wfs
+
+DEB_INSTALL_DOCS_ALL := doc/LICENSE.txt doc/README
+
+VERSION=$(shell /usr/share/pba-cbs/sh/get_deb_version.sh $(srcdir))
+
+export PYBUILD_NAME = $(package)
+export PYBUILD_DISABLE=test
+
+%:
+	dh $@ --with python2,python3 --buildsystem=pybuild
+
+clean::
+	cd debian && rm -rf substvars files *.substvars devhost.txt.gz *.log python3-$(package) python-$(package) tmp
+	rm -rf .pybuild

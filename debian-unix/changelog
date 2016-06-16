@@ -1,0 +1,5 @@
+django-wfs (0.1.0-0) any; urgency=medium
+
+  * New-style debian xpkg packaging for clazzes.org
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Thu, 16 Jun 2016 22:41:42 +0200
