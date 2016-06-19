@@ -5,6 +5,7 @@
    xmlns:ogc="http://www.opengis.net/ogc"
    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/{{wfs_path}}">
+{% if bbox0 %}
     <gml:boundedBy>
 {% if version = '1.0.0' %}
       	<gml:Box srsName="{{ crs }}">  
@@ -19,6 +20,7 @@
         </gml:Envelope>
 {% endif %}
      </gml:boundedBy> 
+{% endif %}
     {% for ftype, feature in features %}
       {% if feature.gml %}
         <gml:featureMember>

@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.gis.db.models.functions import AsGML, Transform, AsGeoJSON
 from django.contrib.gis.geos import Polygon
-from wfs.models import Service, FeatureType
+from wfs.models import Service, FeatureType, ResolutionFilter
 import json
 import logging
 from django.contrib.gis.db.models.aggregates import Extent
@@ -189,8 +189,11 @@ class GeoJsonIterator:
         self.feature_iter = feature_iter
         
     def __iter__(self):
-        
-        yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(self.crs.get_legacy()),json.dumps(self.bbox))
+
+        if self.bbox:        
+            yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(self.crs.get_legacy()),json.dumps(self.bbox))
+        else:
+            yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"features":['%json.dumps(self.crs.get_legacy())
         
         nfeatures = 0
         sep = ""
@@ -236,6 +239,7 @@ def getfeature(request, service,wfs_version):
     bbox = None
     bbox_has_crs = False
     outputFormat = None
+    resolution = None
     
     # A fallback value, if no features can be found
     crs = WGS84_CRS
@@ -267,6 +271,12 @@ def getfeature(request, service,wfs_version):
 
         elif low_key == "filter":
             filtr = low_value
+
+        elif low_key == "resolution":
+            try:
+                resolution = float(low_value)
+            except:
+                return wfs_exception(request, "InvalidParameterValue", "resolution", value)
 
         elif low_key == "bbox":
             #
@@ -424,8 +434,15 @@ def getfeature(request, service,wfs_version):
 
                 if flter:
                     objs = objs.filter(**flter)
-                else:
-                    objs=objs.all()
+
+                if resolution is not None:
+                    
+                    res_flter = ft.resolutionfilter_set.filter(min_resolution__lte = resolution).order_by("-min_resolution").first()
+                    
+                    if res_flter:
+                        log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
+                        res_flter_parsed = json.loads(res_flter.query)
+                        objs = objs.filter(**res_flter_parsed)
 
                 bb_res = objs.aggregate(Extent(geom_field))[geom_field+'__extent']
 
@@ -452,10 +469,11 @@ def getfeature(request, service,wfs_version):
         
     else:
         context['features'] = feature_list
-        context['bbox0'] = result_bbox[0]
-        context['bbox1'] = result_bbox[1]
-        context['bbox2'] = result_bbox[2]
-        context['bbox3'] = result_bbox[3]
+        if result_bbox:
+            context['bbox0'] = result_bbox[0]
+            context['bbox1'] = result_bbox[1]
+            context['bbox2'] = result_bbox[2]
+            context['bbox3'] = result_bbox[3]
         context['crs'] = crs
         context['version'] = wfs_version
         context['wfs_path'] = "1.0.0/WFS-basic.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"

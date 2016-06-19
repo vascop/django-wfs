@@ -1,5 +1,6 @@
 from django.contrib import admin
-from wfs.models import Service, FeatureType, MetadataURL, BoundingBox
+from wfs.models import Service, FeatureType, MetadataURL, BoundingBox,\
+    ResolutionFilter
 from django import forms
 
 
@@ -10,6 +11,11 @@ class MetadataURLInline(admin.StackedInline):
 
 class BBoxInline(admin.StackedInline):
     model = BoundingBox
+    extra = 0
+
+
+class ResolutionFilterInline(admin.StackedInline):
+    model = ResolutionFilter
     extra = 0
 
 
@@ -36,7 +42,7 @@ class FeatureTypeForm(forms.ModelForm):
 class FeatureTypeAdmin(admin.ModelAdmin):
     model = FeatureType
     form = FeatureTypeForm
-    inlines = [BBoxInline, MetadataURLInline]
+    inlines = [ResolutionFilterInline, BBoxInline, MetadataURLInline]
 
 
 admin.site.register(Service)

@@ -128,3 +128,12 @@ class BoundingBox(models.Model):
 
     def __str__(self):
         return "((" + self.minx + ", " + self.miny + "), (" + self.maxx + ", " + self.maxy + "))"
+
+@python_2_unicode_compatible
+class ResolutionFilter(models.Model):
+    featuretype = models.ForeignKey(FeatureType)
+    min_resolution = models.FloatField(help_text="The minimal resolution at which to apply the additional query filter.",db_index=True)
+    query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter()")
+
+    def __str__(self):
+        return "res \u2265 %f" % self.min_resolution
