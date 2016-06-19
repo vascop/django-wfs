@@ -1,3 +1,9 @@
+django-wfs (0.2.0-0) any; urgency=medium
+
+  * Add resolution filters to data model and implement django filter GET options.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Sun, 19 Jun 2016 16:04:31 +0200
+
 django-wfs (0.1.0-0) any; urgency=medium
 
   * New-style debian xpkg packaging for clazzes.org
