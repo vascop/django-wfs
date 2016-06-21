@@ -1,6 +1,12 @@
+django-wfs (0.2.0-1) amy; urgency=medium
+
+  * Release django-wfs-0.2.0-1 to the repos.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Tue, 21 Jun 2016 14:49:47 +0200
+
 django-wfs (0.2.0-0) any; urgency=medium
 
-  * Add resolution filters to data model and implement django filter GET options.
+  * Add resolution filters to data model.
 
  -- Wolfgang Glas <wolfgang.glas@iteg.at>  Sun, 19 Jun 2016 16:04:31 +0200
 
