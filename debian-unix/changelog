@@ -1,4 +1,10 @@
-django-wfs (0.2.0-1) amy; urgency=medium
+django-wfs (0.2.1-0) any; urgency=medium
+
+  * Adpat to django-1.10.x
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Sun, 30 Oct 2016 22:10:24 +0100
+
+django-wfs (0.2.0-1) any; urgency=medium
 
   * Release django-wfs-0.2.0-1 to the repos.
 
