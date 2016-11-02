@@ -7,7 +7,7 @@
    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/{{wfs_path}}">
 {% if bbox0 %}
     <gml:boundedBy>
-{% if version = '1.0.0' %}
+{% if version == '1.0.0' %}
       	<gml:Box srsName="{{ crs }}">  
       		<gml:coordinates>  
       			{{ bbox0 }},{{ bbox1 }} {{ bbox2 }},{{ bbox3 }}
@@ -24,7 +24,7 @@
     {% for ftype, feature in features %}
       {% if feature.gml %}
         <gml:featureMember>
-          <{{ ftype.name }} {% if version = '1.0.0' %}fid{% else %}gml:id{% endif %}="{{ ftype.name }}.{{ feature.id }}">
+          <{{ ftype.name }} {% if version == '1.0.0' %}fid{% else %}gml:id{% endif %}="{{ ftype.name }}.{{ feature.id }}">
             {% gml_feature ftype feature %}
           </{{ ftype.name }}>
         </gml:featureMember>

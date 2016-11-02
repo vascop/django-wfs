@@ -15,7 +15,7 @@ def gml_feature(ftype,feature):
     for field_name in ftype.fields.split(","):
         if field_name:
             field = ftype.get_model_field(field_name)
-            if field:
+            if field and field.concrete:
                 if hasattr(field, "geom_type"):
                     if feature.gml:
                         xml += mark_safe("<geometry>" + feature.gml + "</geometry>")

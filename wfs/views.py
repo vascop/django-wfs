@@ -183,7 +183,8 @@ class GeoJsonIterator:
                             features to be rendere in the response.
     '''
     
-    def __init__(self,crs,bbox,feature_iter):
+    def __init__(self,service_id,crs,bbox,feature_iter):
+        self.service_id = service_id
         self.crs=crs
         self.bbox = bbox
         self.feature_iter = feature_iter
@@ -210,8 +211,10 @@ class GeoJsonIterator:
                     if hasattr(field, "geom_type"):
                         if feature.geojson:
                             geometry = feature.geojson
-                    else:
+                    elif field.concrete:
                         props[field.name] = getattr(feature, field.name)
+                    elif field.one_to_many:
+                        props[field.name] = {"url": "/wfs/%d/related/?id=%s.%d&field=%s" %(self.service_id,ftype.name,feature.id,field.name)}
 
             yield '%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(
                             sep,json.dumps("%s.%d"%(ftype.name,feature.id)),
@@ -465,7 +468,7 @@ def getfeature(request, service,wfs_version):
 
     if outputFormat == JSON_OUTPUT_FORMAT:
         
-        return StreamingHttpResponse(streaming_content=GeoJsonIterator(crs,result_bbox,feature_list),content_type="application/json")
+        return StreamingHttpResponse(streaming_content=GeoJsonIterator(service.id,crs,result_bbox,feature_list),content_type="application/json")
         
     else:
         context['features'] = feature_list
@@ -538,13 +541,70 @@ def featuretype_to_xml(featuretypes):
                     ft.xml += field.name + '" type="xsd:string"/>'
 
 def get_feature_from_parameter(parameter):
-    dot = 0
-    for c in parameter:
-        if c == ".":
-            dot += 1
-            if dot > 1:
-                break
-    if dot != 1:
-        raise ValueError
+    '''
+    Split a parameter name given as featurename.id into
+    a pair (featurename,id)
+    :param parameter: A featurename dot id string.
+    '''
+    dot = parameter.index(".")
+    
+    return (parameter[:dot],int(parameter[dot+1:]))
 
-    return parameter.split(".")
+class RelatedJsonIterator:
+    '''
+        This iterator renders a list of related DB objects::
+
+        :ivar model: A model instance describing the feaures fto be rendered.
+        :ivar feature_iter: An iterator returning the objects to be renderd as JSON objects.
+    '''
+    
+    def __init__(self,model,feature_iter):
+        self.model = model
+        self.feature_iter = feature_iter
+        
+    def __iter__(self):
+
+        yield '{"type":"RelationCollection","objects":['
+        
+        nfeatures = 0
+        sep = ""
+        
+        for feature in self.feature_iter:
+            
+            props = {}
+            
+            for field in self.model._meta.get_fields():
+                if field.concrete and not field.is_relation:
+                    props[field.name] = getattr(feature, field.name)
+
+            yield '%s%s'%(sep,json.dumps(props,cls=DecimalEncoder))
+            sep = ","
+            nfeatures += 1
+        
+        yield '],"totalObjects":%d}'%nfeatures
+
+@csrf_exempt
+def related_handler(request,service_id):
+
+    featureid = request.GET.get("id")
+    field_name = request.GET.get("field")
+    
+    typen,fid = get_feature_from_parameter(featureid)
+    
+    service = Service.objects.get(id=service_id)
+    
+    ft = service.featuretype_set.get(name__iexact=typen)
+
+    model =  ft.model.model_class()
+    
+    relation_field = model._meta.get_field(field_name)
+    
+    kwargs = { relation_field.remote_field.name + "_id" : fid }
+    
+    related_model = relation_field.target_field.model
+    
+    related_objs = related_model.objects.filter(**kwargs)
+    
+    return StreamingHttpResponse(streaming_content=RelatedJsonIterator(related_model,related_objs),content_type="application/json")
+
+    
