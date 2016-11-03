@@ -1,6 +1,13 @@
+django-wfs (0.2.1-1) any; urgency=medium
+
+  * Add support for simple one-to-many relations.
+  * Release to clazzes.org repos.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Thu, 03 Nov 2016 14:03:00 +0100
+
 django-wfs (0.2.1-0) any; urgency=medium
 
-  * Adpat to django-1.10.x
+  * Adapt to django-1.10.x
 
  -- Wolfgang Glas <wolfgang.glas@iteg.at>  Sun, 30 Oct 2016 22:10:24 +0100
 
