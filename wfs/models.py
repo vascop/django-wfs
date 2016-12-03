@@ -68,9 +68,9 @@ class FeatureType(models.Model):
     srs = models.CharField(max_length=254, default="EPSG:4326")
     othersrs = models.CharField(max_length=1020, default="EPSG:3857",null=True, blank=True,
                                 help_text='Comma separated list of alternative Spatial Reference Systems to which database-persisted coordinates may be transformed.')
-    model = models.ForeignKey(ContentType)
+    model = models.ForeignKey(ContentType,null=True, blank=True, help_text="django model or null, if a raw SQL query should be delivered.")
     fields = models.CharField(max_length=254, null=True, blank=True)
-    query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter()")
+    query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter() or a raw SQL query.")
 
     def __str__(self):
         return self.name

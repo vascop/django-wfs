@@ -25,10 +25,13 @@ class FeatureTypeForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(FeatureTypeForm, self).__init__(*args, **kwargs)
         if hasattr(self.instance, "model"):
-            model_fields = self.instance.model.model_class()._meta.get_fields()
-            self.fields['fields'].choices = [(field.name, field.name) for field in model_fields]
-            if self.instance.fields:
-                self.initial['fields'] = [str(field) for field in self.instance.fields.split(",")]
+            
+            if self.instance.model is not None:
+            
+                model_fields = self.instance.model.model_class()._meta.get_fields()
+                self.fields['fields'].choices = [(field.name, field.name) for field in model_fields]
+                if self.instance.fields:
+                    self.initial['fields'] = [str(field) for field in self.instance.fields.split(",")]
 
     class Meta:
         model = FeatureType

@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.gis.db.models.functions import AsGML, Transform, AsGeoJSON
 from django.contrib.gis.geos import Polygon
-from wfs.models import Service, FeatureType, ResolutionFilter
+from wfs.models import Service, FeatureType
 import json
 import logging
 from django.contrib.gis.db.models.aggregates import Extent
@@ -10,6 +10,8 @@ from wfs.helpers import CRS, WGS84_CRS
 from django.http.response import StreamingHttpResponse
 import decimal
 import re
+from django.db import connection
+from django.contrib.gis.geos.geometry import GEOSGeometry
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +69,23 @@ def global_handler(request, service_id):
 
 def atoi(text):
     return int(text) if text.isdigit() else text
+
+
+def _is_geom_column(colinfo):
+    '''
+    Check, if a raw SQL column info represents a geometry column.
+    
+    :param colinfo: A tuple with the column name and the column type according to PEP-249.
+    '''
+    return colinfo[0] == "shape"
+
+def _is_id_column(colinfo):
+    '''
+    Check, if a raw SQL column info represents an ID column.
+    
+    :param colinfo: A tuple with the column name and the column type according to PEP-249.
+    '''
+    return colinfo[0] == "id"
 
 def natural_keys(text):
     '''
@@ -141,23 +160,99 @@ def describefeaturetype(request, service,wfs_version):
     return render(request, 'describeFeatureType.xml', context, content_type="text/xml")
 
 class type_feature_iter:
-    def __init__(self):
+    def __init__(self,raw,srid):
         self.types_with_features = []
+        self.raw = raw
+        self.srid = srid
     
     def add_type_with_features(self,ftype,feature_iter):
         self.types_with_features.append((ftype,feature_iter))
-    
+        
     def __iter__(self):
         for ftype,feature_iter in self.types_with_features:
-            for feature in feature_iter:
-                yield ftype,feature
+            
+            if ftype.model is None:
+                for feature in feature_iter:
+                    yield ftype,RawFeature(feature_iter.description,feature,self.srid)
+            else:
+                for feature in feature_iter:
+                    if self.raw:
+                        yield ftype,feature
+                    else:
+                        yield ftype,DjangoFeature(ftype,feature)
 
+    def close(self):
+        for ftype,feature_iter in self.types_with_features:  # @UnusedVariable
+            if hasattr(feature_iter,"close"):
+                try:
+                    feature_iter.close()
+                except:
+                    log.exception("Error closing feature iterator.")
+    
 class DecimalEncoder(json.JSONEncoder):
     
     def default(self,o):
         if isinstance(o, decimal.Decimal):
             return float(o)
         return super(DecimalEncoder,self).default(o)
+
+class RawFeature:
+    
+    def __init__(self,colinfos,row,srid):
+        '''
+        Convert a SQL result set row and a list of SQL result set colinfos
+        to a properties array and a geometry geojson string.
+        
+        :param colinfos: A list of PEP-249 colinfo tuples.
+        :param row: An SQL result set row with as many members as ``colinfos``
+        '''
+        
+        self.props = {}
+        self.id = None
+        self.geometry = None
+        
+        for i,colinfo in enumerate(colinfos):
+            if _is_geom_column(colinfo):
+                
+                geom = GEOSGeometry(row[i])
+                
+                if srid is not None and srid != geom.srid:
+                    geom.transform(srid)
+                
+                self.geometry = geom.geojson
+            else:
+                if _is_id_column(colinfo):
+                    self.id = row[i]
+                
+                self.props[colinfo[0]] = row[i]
+
+class DjangoFeature:
+    
+    def __init__(self,ftype,feature):
+        '''
+        Convert a django feature and a feature type to a properties array and a    
+        geometry geojson string. 
+        
+        :param ftype: A feature type
+        :param feature: A feature
+        '''
+        
+        self.props = {}
+        self.id = feature.id
+        self.geometry = None
+        
+        for field_name in ftype.fields.split(","):
+            if field_name:
+                field = ftype.get_model_field(field_name)
+            if field:
+                if hasattr(field, "geom_type"):
+                    if feature.geojson:
+                        self.geometry = feature.geojson
+                elif field.concrete:
+                    self.props[field.name] = getattr(feature, field.name)
+                elif field.one_to_many:
+                    self.props[field.name] = {"url": "/wfs/%d/related/?id=%s.%d&field=%s" %(self.service_id,ftype.name,feature.id,field.name)}
+
 
 class GeoJsonIterator:
     '''
@@ -201,29 +296,19 @@ class GeoJsonIterator:
         
         for ftype,feature in self.feature_iter:
             
-            props = {}
-            geometry = None
-            
-            for field_name in ftype.fields.split(","):
-                if field_name:
-                    field = ftype.get_model_field(field_name)
-                if field:
-                    if hasattr(field, "geom_type"):
-                        if feature.geojson:
-                            geometry = feature.geojson
-                    elif field.concrete:
-                        props[field.name] = getattr(feature, field.name)
-                    elif field.one_to_many:
-                        props[field.name] = {"url": "/wfs/%d/related/?id=%s.%d&field=%s" %(self.service_id,ftype.name,feature.id,field.name)}
-
             yield '%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(
                             sep,json.dumps("%s.%d"%(ftype.name,feature.id)),
-                            geometry,
-                            json.dumps(props,cls=DecimalEncoder))
+                            feature.geometry,
+                            json.dumps(feature.props,cls=DecimalEncoder))
             sep = ","
             nfeatures += 1
         
         yield '],"totalFeatures":%d}'%nfeatures
+
+    def close(self):
+        
+        if hasattr(self.feature_iter,"close"):
+            self.feature_iter.close()
 
 XML_OUTPUT_FORMAT = "application/gml+xml"
 ALL_XML_OUTPUT_FORMATS = ( XML_OUTPUT_FORMAT, "application/xml", "text/xml", "xml", "gml" )
@@ -345,143 +430,251 @@ def getfeature(request, service,wfs_version):
 
     result_bbox=None
 
-    # If FeatureID is present we return every feature on the list of ID's
-    if featureid is not None:
-        
-        feature_list = []
-        
-        # we assume every feature is identified by its Featuretype name + its object ID like "name.id"
-        for feature in featureid.split(","):
-            try:
-                ftname, fid = get_feature_from_parameter(feature)
-            except ValueError:
-                return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
-            try:
-                ft = service.featuretype_set.get(name=ftname)
-                ft_crs = CRS(ft.srs)
+    closeable = None
+
+    try:
+    
+        # If FeatureID is present we return every feature on the list of ID's
+        if featureid is not None:
+            
+            feature_list = []
+            
+            # we assume every feature is identified by its Featuretype name + its object ID like "name.id"
+            for feature in featureid.split(","):
                 try:
-                    geom_field = ft.find_first_geometry_field()
-                    if geom_field is None:
-                        return wfs_exception(request, "NoGeometryField", "feature")
-            
-                    flter = json.loads(ft.query)
-                    objs=ft.model.model_class().objects
-
-                    if bbox:
-                        bbox_args = { geom_field+"__bboverlaps":bbox }
-                        objs=objs.filter(**bbox_args)
-                    
-                    if crs.srid != ft_crs.srid:
-                        objs = objs.annotate(xform=Transform(geom_field,crs.srid))
-                        geom_field = "xform"
-
-                    if outputFormat == JSON_OUTPUT_FORMAT:
-                        objs = objs.annotate(geojson=AsGeoJSON(geom_field))
-                    else:
-                        objs = objs.annotate(gml=AsGML(geom_field))
-
-                    if flter:
-                        objs = objs.filter(**flter)
+                    ftname, fid = get_feature_from_parameter(feature)
+                except ValueError:
+                    return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
+                try:
+                    ft = service.featuretype_set.get(name=ftname)
+                    ft_crs = CRS(ft.srs)
+                    try:
                         
-                    f = objs.filter(id=fid)
+                        if ft.model is None:
 
-                    bb_res = f.aggregate(Extent(geom_field))[geom_field+'__extent']
+                            # GML output of raw results not yet implemented
+                            if outputFormat != JSON_OUTPUT_FORMAT:
+                                raise NotImplementedError
+                            
+                            # raw SQL result set
+                            with connection.cursor() as cur:
+                                
+                                sql = ft.query
+                                
+                                if " where " in sql:
+                                    sql += " and id=%s"
+                                else:
+                                    sql += " where id=%s"
+                                
+                                if log.getEffectiveLevel() <= logging.DEBUG:
+                                    log.debug("Final SQL for feature [%s] is [%s]"%(feature,sql))
 
-                    if log.getEffectiveLevel() <= logging.DEBUG:
-                        log.debug("Bounding box for feature [%s] is [%s]"%(feature,bb_res))
+                                cur.execute(ft.query,(fid,))
+                        
+                                row = cur.fetchone()
+                                
+                                feature = RawFeature(cur.description,row,crs.srid)
+                            
+                                if feature.geometry is None:
+                                    return wfs_exception(request, "NoGeometryField", "feature")
+                                
+                                feature_list.append((ft,feature))
+                        else:
+                            # django model based result set.
+                            geom_field = ft.find_first_geometry_field()
+                            if geom_field is None:
+                                return wfs_exception(request, "NoGeometryField", "feature")
                     
-                    if result_bbox is None:
-                        result_bbox = bb_res
-                    else:
-                        result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
-                                      max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
-
-                    feature_list.append((ft, f[0]))
-                except:
-                    log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
-                    return wfs_exception(request, "MalformedJSONQuery", "query")
-            except FeatureType.DoesNotExist:
-                return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
-    # If FeatureID isn't present we rely on TypeName and return every feature present it the requested FeatureTypes
-    elif typename is not None:
+                            flter = json.loads(ft.query)
+                            objs=ft.model.model_class().objects
         
-        feature_list = type_feature_iter()
+                            if bbox:
+                                bbox_args = { geom_field+"__bboverlaps":bbox }
+                                objs=objs.filter(**bbox_args)
+                            
+                            if crs.srid != ft_crs.srid:
+                                objs = objs.annotate(xform=Transform(geom_field,crs.srid))
+                                geom_field = "xform"
         
-        for typen in typename.split(","):
-            try:
-                ft = service.featuretype_set.get(name__iexact=typen)
-                ft_crs = CRS(ft.srs)
-            except FeatureType.DoesNotExist:
-                return wfs_exception(request, "InvalidParameterValue", "typename", typen)
-            try:
-                geom_field = ft.find_first_geometry_field()
-                if geom_field is None:
-                    return wfs_exception(request, "NoGeometryField", "feature")
+                            if outputFormat == JSON_OUTPUT_FORMAT:
+                                objs = objs.annotate(geojson=AsGeoJSON(geom_field))
+                            else:
+                                objs = objs.annotate(gml=AsGML(geom_field))
+        
+                            if flter:
+                                objs = objs.filter(**flter)
+                                
+                            f = objs.filter(id=fid)
+        
+                            bb_res = f.aggregate(Extent(geom_field))[geom_field+'__extent']
+        
+                            if log.getEffectiveLevel() <= logging.DEBUG:
+                                log.debug("Bounding box for feature [%s] is [%s]"%(feature,bb_res))
+                            
+                            if result_bbox is None:
+                                result_bbox = bb_res
+                            else:
+                                result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
+                                              max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
+                                
+                            if outputFormat == JSON_OUTPUT_FORMAT:
+                                feature_list.append((ft, DjangoFeature(ft,f[0])))
+                            else:
+                                feature_list.append((ft, f[0]))
+                                    
+                    except:
+                        log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
+                        return wfs_exception(request, "MalformedJSONQuery", "query")
+                except FeatureType.DoesNotExist:
+                    return wfs_exception(request, "InvalidParameterValue", "featureid", feature)
+        # If FeatureID isn't present we rely on TypeName and return every feature present it the requested FeatureTypes
+        elif typename is not None:
             
-                flter = json.loads(ft.query)
+            feature_list = type_feature_iter(outputFormat != JSON_OUTPUT_FORMAT,crs.srid)
+            closeable = feature_list
+            
+            for typen in typename.split(","):
+                try:
+                    ft = service.featuretype_set.get(name__iexact=typen)
+                    ft_crs = CRS(ft.srs)
+                except FeatureType.DoesNotExist:
+                    return wfs_exception(request, "InvalidParameterValue", "typename", typen)
                 
-                objs=ft.model.model_class().objects
+                if ft.model is None:
 
-                if bbox:
-                    bbox_args = { geom_field+"__bboverlaps":bbox }
-                    objs=objs.filter(**bbox_args)
-
-                if crs.srid != ft_crs.srid:
-                    objs = objs.annotate(xform=Transform(geom_field,crs.srid))
-                    geom_field = "xform"
-
-                if outputFormat == JSON_OUTPUT_FORMAT:
-                    objs = objs.annotate(geojson=AsGeoJSON(geom_field))
-                else:
-                    objs = objs.annotate(gml=AsGML(geom_field))
-
-                if flter:
-                    objs = objs.filter(**flter)
-
-                if resolution is not None:
+                    # GML output of raw results not yet implemented
+                    if outputFormat != JSON_OUTPUT_FORMAT:
+                        raise NotImplementedError
+                            
+                    # raw SQL result set
+                    cur = connection.cursor()
                     
-                    res_flter = ft.resolutionfilter_set.filter(min_resolution__lte = resolution).order_by("-min_resolution").first()
+                    try:
+                        
+                        sql = ft.query
+                        
+                        if resolution is not None:
+                            
+                            res_flter = ft.resolutionfilter_set.filter(min_resolution__lte = resolution).order_by("-min_resolution").first()
+                            
+                            if res_flter:
+                                if log.getEffectiveLevel() <= logging.DEBUG:
+                                    log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
+                                
+                                if " where " in sql:
+                                    sql += " and (" + res_flter.query + ")"
+                                else:
+                                    sql += " where " + res_flter.query
+                        
+                        params = []
+                        
+                        if bbox is not None:
+                            
+                            sql = "select * from (" +sql +") as x where ST_Intersects(shape,%s)"
+                            params.append(bbox.hexewkb.decode("utf-8"))    
+                                                                          
+                        if log.getEffectiveLevel() <= logging.DEBUG:
+                            log.debug("Final SQL for feature [%s] is [%s]"%(ft.name,sql))
+
+                        cur.execute(sql,params)
                     
-                    if res_flter:
-                        log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
-                        res_flter_parsed = json.loads(res_flter.query)
-                        objs = objs.filter(**res_flter_parsed)
+                        has_geometry = False
+                    
+                        for colinfo in cur.description:
+                            if _is_geom_column(colinfo):
+                                has_geometry = True
+                                break
+                        
+                        if not has_geometry:
+                            return wfs_exception(request, "NoGeometryField", "feature")
 
-                bb_res = objs.aggregate(Extent(geom_field))[geom_field+'__extent']
-
-                if log.getEffectiveLevel() <= logging.DEBUG:
-                    log.debug("Bounding box for feature type [%s] is [%s]"%(typen,bb_res))
-
-                if result_bbox is None:
-                    result_bbox = bb_res
+                        feature_list.add_type_with_features(ft,cur)
+                        
+                    except:
+                        cur.close()
+                        log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
+                        return wfs_exception(request, "MalformedJSONQuery", "query")
+                
                 else:
-                    result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
-                                   max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
+                    try:
+                        geom_field = ft.find_first_geometry_field()
+                        if geom_field is None:
+                            return wfs_exception(request, "NoGeometryField", "feature")
+                    
+                        flter = json.loads(ft.query)
+                        
+                        objs=ft.model.model_class().objects
+        
+                        if bbox:
+                            bbox_args = { geom_field+"__bboverlaps":bbox }
+                            objs=objs.filter(**bbox_args)
+        
+                        if crs.srid != ft_crs.srid:
+                            objs = objs.annotate(xform=Transform(geom_field,crs.srid))
+                            geom_field = "xform"
+        
+                        if outputFormat == JSON_OUTPUT_FORMAT:
+                            objs = objs.annotate(geojson=AsGeoJSON(geom_field))
+                        else:
+                            objs = objs.annotate(gml=AsGML(geom_field))
+        
+                        if flter:
+                            objs = objs.filter(**flter)
+        
+                        if resolution is not None:
+                            
+                            res_flter = ft.resolutionfilter_set.filter(min_resolution__lte = resolution).order_by("-min_resolution").first()
+                            
+                            if res_flter:
+                                log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
+                                res_flter_parsed = json.loads(res_flter.query)
+                                objs = objs.filter(**res_flter_parsed)
+        
+                        bb_res = objs.aggregate(Extent(geom_field))[geom_field+'__extent']
+        
+                        if log.getEffectiveLevel() <= logging.DEBUG:
+                            log.debug("Bounding box for feature type [%s] is [%s]"%(typen,bb_res))
+        
+                        if result_bbox is None:
+                            result_bbox = bb_res
+                        else:
+                            result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
+                                           max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
+        
+                        feature_list.add_type_with_features(ft,objs)
+        
+                    except:
+                        log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
+                        return wfs_exception(request, "MalformedJSONQuery", "query")
+        else:
+            return wfs_exception(request, "MissingParameter", "typename")
+    
+        if outputFormat == JSON_OUTPUT_FORMAT:
+            
+            ret = StreamingHttpResponse(streaming_content=GeoJsonIterator(service.id,crs,result_bbox,feature_list),content_type="application/json")
+            
+        else:
+            context['features'] = feature_list
+            if result_bbox:
+                context['bbox0'] = result_bbox[0]
+                context['bbox1'] = result_bbox[1]
+                context['bbox2'] = result_bbox[2]
+                context['bbox3'] = result_bbox[3]
+            context['crs'] = crs
+            context['version'] = wfs_version
+            context['wfs_path'] = "1.0.0/WFS-basic.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"
+            ret = render(request, 'getFeature.xml', context, content_type="text/xml")
 
-                feature_list.add_type_with_features(ft,objs)
+        # Now, closing of resources is delegated to the HTTP response
+        closeable = None
+        return ret
 
+    finally:
+        if closeable is not None:
+            try:
+                closeable.close()
             except:
-                log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
-                return wfs_exception(request, "MalformedJSONQuery", "query")
-    else:
-        return wfs_exception(request, "MissingParameter", "typename")
-
-    if outputFormat == JSON_OUTPUT_FORMAT:
-        
-        return StreamingHttpResponse(streaming_content=GeoJsonIterator(service.id,crs,result_bbox,feature_list),content_type="application/json")
-        
-    else:
-        context['features'] = feature_list
-        if result_bbox:
-            context['bbox0'] = result_bbox[0]
-            context['bbox1'] = result_bbox[1]
-            context['bbox2'] = result_bbox[2]
-            context['bbox3'] = result_bbox[3]
-        context['crs'] = crs
-        context['version'] = wfs_version
-        context['wfs_path'] = "1.0.0/WFS-basic.xsd" if wfs_version == "1.0.0" else "1.1.0/wfs.xsd"
-        return render(request, 'getFeature.xml', context, content_type="text/xml")
-
+                log.exception("Error closing left-over SQL cursor in WFS service.")
 
 def wfs_exception(request, code, locator, parameter=None):
     context = {}
@@ -512,7 +705,7 @@ def wfs_exception(request, code, locator, parameter=None):
     return render(request, 'exception.xml', context, content_type="text/xml")
 
 #
-# This list a synthesis of this geomtry type in
+# This list a synthesis of this geometry type in
 #   http://schemas.opengis.net/gml/2.1.2/feature.xsd
 # and
 #   http://www.opengeospatial.org/standards/sfs
@@ -529,7 +722,25 @@ GML_GEOTYPES = { 'POINT':           'gml:PointPropertyType',
 def featuretype_to_xml(featuretypes):
     for ft in featuretypes:
         ft.xml = ""
-        fields = ft.model.model_class()._meta.fields
+        
+        model = ft.model.model_class()
+        
+        if model is None:
+            
+            with connection.cursor() as cur:
+                cur.execute(ft.query)
+        
+                for colinfo in cur.description:
+                    
+                    ft.xml += '<xsd:element name="'
+                    
+                    if _is_geom_column(colinfo):
+                        
+                        ft.xml += 'geometry" type="gml:GeometryAssociationType"/>'
+                    else:
+                        ft.xml += colinfo[0] + '" type="xsd:string"/>'
+        
+        fields = model._meta.fields
         for field in fields:
             if len(ft.fields) == 0 or field.name in ft.fields.split(","):
                 ft.xml += '<xsd:element name="'
