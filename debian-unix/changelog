@@ -1,3 +1,9 @@
+django-wfs (0.3.0-1) amy; urgency=medium
+
+  *  Release to clazzes.org repos.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Tue, 06 Dec 2016 10:28:56 +0100
+
 django-wfs (0.3.0-0) any; urgency=medium
 
   * Add support for raw PostGIS queries.
