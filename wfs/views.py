@@ -12,6 +12,7 @@ import decimal
 import re
 from django.db import connection
 from django.contrib.gis.geos.geometry import GEOSGeometry
+import io
 
 log = logging.getLogger(__name__)
 
@@ -160,10 +161,11 @@ def describefeaturetype(request, service,wfs_version):
     return render(request, 'describeFeatureType.xml', context, content_type="text/xml")
 
 class type_feature_iter:
-    def __init__(self,raw,srid):
+    def __init__(self,raw,srid,precision = None):
         self.types_with_features = []
         self.raw = raw
         self.srid = srid
+        self.precision = precision
     
     def add_type_with_features(self,ftype,feature_iter):
         self.types_with_features.append((ftype,feature_iter))
@@ -173,13 +175,13 @@ class type_feature_iter:
             
             if ftype.model is None:
                 for feature in feature_iter:
-                    yield ftype,RawFeature(feature_iter.description,feature,self.srid)
+                    yield ftype,RawFeature(feature_iter.description,feature,self.srid,self.precision)
             else:
                 for feature in feature_iter:
                     if self.raw:
                         yield ftype,feature
                     else:
-                        yield ftype,DjangoFeature(ftype,feature)
+                        yield ftype,DjangoFeature(ftype,feature,self.precision)
 
     def close(self):
         for ftype,feature_iter in self.types_with_features:  # @UnusedVariable
@@ -198,13 +200,16 @@ class DecimalEncoder(json.JSONEncoder):
 
 class RawFeature:
     
-    def __init__(self,colinfos,row,srid):
+    def __init__(self,colinfos,row,srid, precision = None):
         '''
         Convert a SQL result set row and a list of SQL result set colinfos
         to a properties array and a geometry geojson string.
         
         :param colinfos: A list of PEP-249 colinfo tuples.
         :param row: An SQL result set row with as many members as ``colinfos``
+        :param srid: The target spatial reference ID to convert the geometry to.
+        :param precision: A precision for simplifying geometries or None to
+                          to skip geometry simplifications.
         '''
         
         self.props = {}
@@ -219,7 +224,11 @@ class RawFeature:
                 if srid is not None and srid != geom.srid:
                     geom.transform(srid)
                 
-                self.geometry = geom.geojson
+                if precision is None:
+                    self.geometry = geom
+                else:
+                    self.geometry = geom.simplify(precision)
+                    
             else:
                 if _is_id_column(colinfo):
                     self.id = row[i]
@@ -228,13 +237,15 @@ class RawFeature:
 
 class DjangoFeature:
     
-    def __init__(self,ftype,feature):
+    def __init__(self,ftype,feature,precision=None):
         '''
         Convert a django feature and a feature type to a properties array and a    
         geometry geojson string. 
         
         :param ftype: A feature type
         :param feature: A feature
+        :param precision: A precision for simplifying geometries or None to
+                          to skip geometry simplifications.
         '''
         
         self.props = {}
@@ -246,8 +257,10 @@ class DjangoFeature:
                 field = ftype.get_model_field(field_name)
             if field:
                 if hasattr(field, "geom_type"):
-                    if feature.geojson:
-                        self.geometry = feature.geojson
+                    if precision is None:
+                        self.geometry = getattr(feature,field.name)
+                    else:
+                        self.geometry = getattr(feature,field.name).simplify(precision)
                 elif field.concrete:
                     self.props[field.name] = getattr(feature, field.name)
                 elif field.one_to_many:
@@ -286,24 +299,38 @@ class GeoJsonIterator:
         
     def __iter__(self):
 
-        if self.bbox:        
-            yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(self.crs.get_legacy()),json.dumps(self.bbox))
-        else:
-            yield '{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"features":['%json.dumps(self.crs.get_legacy())
+        os = io.StringIO()
         
-        nfeatures = 0
-        sep = ""
-        
-        for ftype,feature in self.feature_iter:
+        try:
+            if self.bbox:        
+                os.write('{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"bbox":%s,"features":['%(json.dumps(self.crs.get_legacy()),json.dumps(self.bbox)))
+            else:
+                os.write('{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":%s}},"features":['%json.dumps(self.crs.get_legacy()))
             
-            yield '%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(
-                            sep,json.dumps("%s.%d"%(ftype.name,feature.id)),
-                            feature.geometry,
-                            json.dumps(feature.props,cls=DecimalEncoder))
-            sep = ","
-            nfeatures += 1
-        
-        yield '],"totalFeatures":%d}'%nfeatures
+            nfeatures = 0
+            sep = ""
+            
+            for ftype,feature in self.feature_iter:
+                
+                os.write('%s{"type":"Feature","id":%s,"geometry":%s,"properties":%s}'%(
+                                sep,json.dumps("%s.%d"%(ftype.name,feature.id)),
+                                feature.geometry.geojson,
+                                json.dumps(feature.props,cls=DecimalEncoder)))
+                
+                if os.tell() > 16383:
+                    v = os.getvalue()
+                    os.close()
+                    os = io.StringIO()
+                    yield v
+    
+                sep = ","
+                nfeatures += 1
+            
+            os.write('],"totalFeatures":%d}'%nfeatures)
+            yield os.getvalue()
+
+        finally:
+            os.close()
 
     def close(self):
         
@@ -328,6 +355,7 @@ def getfeature(request, service,wfs_version):
     bbox_has_crs = False
     outputFormat = None
     resolution = None
+    precision = None
     
     # A fallback value, if no features can be found
     crs = WGS84_CRS
@@ -366,6 +394,12 @@ def getfeature(request, service,wfs_version):
             except:
                 return wfs_exception(request, "InvalidParameterValue", "resolution", value)
 
+        elif low_key == "precision":
+            try:
+                precision = float(low_value)
+            except:
+                return wfs_exception(request, "InvalidParameterValue", "precision", value)
+
         elif low_key == "bbox":
             #
             # See the following URL for all the gory details on the passed in bounding box:
@@ -390,7 +424,7 @@ def getfeature(request, service,wfs_version):
                 
                 bbox.set_srid(bbox_crs.srid)
             except:
-                return wfs_exception(request, "InvalidParameterValue", "maxfeatures", value)
+                return wfs_exception(request, "InvalidParameterValue", "bbox", value)
 
         elif low_key == "srsname":
             try:
@@ -473,7 +507,7 @@ def getfeature(request, service,wfs_version):
                         
                                 row = cur.fetchone()
                                 
-                                feature = RawFeature(cur.description,row,crs.srid)
+                                feature = RawFeature(cur.description,row,crs.srid,precision)
                             
                                 if feature.geometry is None:
                                     return wfs_exception(request, "NoGeometryField", "feature")
@@ -488,25 +522,20 @@ def getfeature(request, service,wfs_version):
                             flter = json.loads(ft.query)
                             objs=ft.model.model_class().objects
         
+                            if flter:
+                                objs = objs.filter(**flter)
+                                
                             if bbox:
                                 bbox_args = { geom_field+"__bboverlaps":bbox }
                                 objs=objs.filter(**bbox_args)
+
+                            objs = objs.filter(id=fid)
                             
                             if crs.srid != ft_crs.srid:
                                 objs = objs.annotate(xform=Transform(geom_field,crs.srid))
                                 geom_field = "xform"
         
-                            if outputFormat == JSON_OUTPUT_FORMAT:
-                                objs = objs.annotate(geojson=AsGeoJSON(geom_field))
-                            else:
-                                objs = objs.annotate(gml=AsGML(geom_field))
-        
-                            if flter:
-                                objs = objs.filter(**flter)
-                                
-                            f = objs.filter(id=fid)
-        
-                            bb_res = f.aggregate(Extent(geom_field))[geom_field+'__extent']
+                            bb_res = objs.aggregate(Extent(geom_field))[geom_field+'__extent']
         
                             if log.getEffectiveLevel() <= logging.DEBUG:
                                 log.debug("Bounding box for feature [%s] is [%s]"%(feature,bb_res))
@@ -517,10 +546,18 @@ def getfeature(request, service,wfs_version):
                                 result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
                                               max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
                                 
-                            if outputFormat == JSON_OUTPUT_FORMAT:
-                                feature_list.append((ft, DjangoFeature(ft,f[0])))
+                            if outputFormat == XML_OUTPUT_FORMAT:
+                                objs = objs.annotate(gml=AsGML(geom_field))
+        
+                            f = objs.first()
+        
+                            if f is None:
+                                log.warning("Feature with ID [%s] not found."%feature)
                             else:
-                                feature_list.append((ft, f[0]))
+                                if outputFormat == JSON_OUTPUT_FORMAT:
+                                    feature_list.append((ft, DjangoFeature(ft,objs[0],precision)))
+                                else:
+                                    feature_list.append((ft, objs[0]))
                                     
                     except:
                         log.exception("caught exception in request [%s %s?%s]",request.method,request.path,request.environ['QUERY_STRING'])
@@ -530,7 +567,7 @@ def getfeature(request, service,wfs_version):
         # If FeatureID isn't present we rely on TypeName and return every feature present it the requested FeatureTypes
         elif typename is not None:
             
-            feature_list = type_feature_iter(outputFormat != JSON_OUTPUT_FORMAT,crs.srid)
+            feature_list = type_feature_iter(outputFormat != JSON_OUTPUT_FORMAT,crs.srid,precision)
             closeable = feature_list
             
             for typen in typename.split(","):
@@ -605,19 +642,6 @@ def getfeature(request, service,wfs_version):
                         
                         objs=ft.model.model_class().objects
         
-                        if bbox:
-                            bbox_args = { geom_field+"__bboverlaps":bbox }
-                            objs=objs.filter(**bbox_args)
-        
-                        if crs.srid != ft_crs.srid:
-                            objs = objs.annotate(xform=Transform(geom_field,crs.srid))
-                            geom_field = "xform"
-        
-                        if outputFormat == JSON_OUTPUT_FORMAT:
-                            objs = objs.annotate(geojson=AsGeoJSON(geom_field))
-                        else:
-                            objs = objs.annotate(gml=AsGML(geom_field))
-        
                         if flter:
                             objs = objs.filter(**flter)
         
@@ -630,6 +654,14 @@ def getfeature(request, service,wfs_version):
                                 res_flter_parsed = json.loads(res_flter.query)
                                 objs = objs.filter(**res_flter_parsed)
         
+                        if bbox:
+                            bbox_args = { geom_field+"__bboverlaps":bbox }
+                            objs=objs.filter(**bbox_args)
+        
+                        if crs.srid != ft_crs.srid:
+                            objs = objs.annotate(xform=Transform(geom_field,crs.srid))
+                            geom_field = "xform"
+        
                         bb_res = objs.aggregate(Extent(geom_field))[geom_field+'__extent']
         
                         if log.getEffectiveLevel() <= logging.DEBUG:
@@ -640,6 +672,9 @@ def getfeature(request, service,wfs_version):
                         else:
                             result_bbox =(min(result_bbox[0],bb_res[0]),min(result_bbox[1],bb_res[1]),
                                            max(result_bbox[2],bb_res[2]),max(result_bbox[3],bb_res[3]) )
+        
+                        if outputFormat == XML_OUTPUT_FORMAT:
+                            objs = objs.annotate(gml=AsGML(geom_field))
         
                         feature_list.add_type_with_features(ft,objs)
         
