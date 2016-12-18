@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.gis.db.models.functions import AsGML, Transform, AsGeoJSON
+from django.contrib.gis.db.models.functions import AsGML, Transform
 from django.contrib.gis.geos import Polygon
 from wfs.models import Service, FeatureType
 import json
