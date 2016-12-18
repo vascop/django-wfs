@@ -21,6 +21,7 @@ setup(
     include_package_data=True,
     package_dir={'wfs': 'wfs'},
     version=read_version(),
+    install_requires = ['sqlparse>=0.2.2'],
     description='A WFS (web feature service) implementation as a Django application.',
     author='Vasco Pinho',
     author_email='vascogpinho@gmail.com',

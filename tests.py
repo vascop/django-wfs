@@ -1,5 +1,21 @@
 from unittest import TestCase
 from wfs.helpers import CRS
+from wfs.sqlutils import parse_single,replace_identifier,build_function_call,build_comparison,find_identifier,get_identifiers,add_condition
+import logging
+import sys
+
+# development-mode logging
+handler = logging.StreamHandler(sys.stderr)
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s') 
+handler.setFormatter(formatter)
+handler.setLevel(logging.DEBUG)
+    
+root_logger = logging.getLogger()
+root_logger.addHandler(handler)
+root_logger.setLevel(logging.DEBUG)
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 # Create your tests here.
 
@@ -28,3 +44,51 @@ class Test(TestCase):
 
         with self.assertRaises(SyntaxError):
             CRS("urn:ogc:def:crs:EPSG:7.4:CRS84")
+
+    def testSimplify(self):
+        
+        select = parse_single("select objectid as id, name,area,wkb_geometry as shape from import.abc_polygon")
+        identifiers = get_identifiers(select)
+        shape = find_identifier(identifiers,"shape")
+        idi = find_identifier(identifiers,"id")
+        simplified = build_function_call("ST_Simplify",shape,1,True)
+        replace_identifier(identifiers,shape,simplified)
+        log.info(select)
+        
+        self.assertEquals("select objectid as id, name,area,ST_Simplify(wkb_geometry,%s) AS shape from import.abc_polygon",str(select))
+
+        add_condition(select,build_function_call("ST_Intersects",shape,1))
+
+        log.info(select)
+
+        self.assertEquals("select objectid as id, name,area,ST_Simplify(wkb_geometry,%s) AS shape from import.abc_polygon where ST_Intersects(wkb_geometry,%s)",str(select))
+
+        add_condition(select,build_comparison(idi,"="))
+
+        log.info(select)
+
+        self.assertEquals("select objectid as id, name,area,ST_Simplify(wkb_geometry,%s) AS shape from import.abc_polygon where ST_Intersects(wkb_geometry,%s) and objectid = %s",str(select))
+
+    def testSimplifyAlias(self):
+        
+        select = parse_single("select a.objectid as id, a.name,a.area,a.wkb_geometry as shape from import.abc_polygon a")
+        identifiers = get_identifiers(select)
+        shape = find_identifier(identifiers,"shape")
+        idi = find_identifier(identifiers,"id")
+        simplified = build_function_call("ST_Simplify",shape,1,True)
+        replace_identifier(identifiers,shape,simplified)
+        log.info(select)
+        
+        self.assertEquals("select a.objectid as id, a.name,a.area,ST_Simplify(a.wkb_geometry,%s) AS shape from import.abc_polygon a",str(select))
+
+        add_condition(select,build_function_call("ST_Intersects",shape,1))
+
+        log.info(select)
+
+        self.assertEquals("select a.objectid as id, a.name,a.area,ST_Simplify(a.wkb_geometry,%s) AS shape from import.abc_polygon a where ST_Intersects(a.wkb_geometry,%s)",str(select))
+
+        add_condition(select,build_comparison(idi,"="))
+
+        log.info(select)
+
+        self.assertEquals("select a.objectid as id, a.name,a.area,ST_Simplify(a.wkb_geometry,%s) AS shape from import.abc_polygon a where ST_Intersects(a.wkb_geometry,%s) and a.objectid = %s",str(select))
