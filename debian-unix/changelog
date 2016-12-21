@@ -1,4 +1,10 @@
-django-wfs (0.3.0-1) amy; urgency=medium
+django-wfs (0.4.0-1) any; urgency=medium
+
+  * Integrate sqlparser library for more efficient SQL statement manipulations.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Wed, 21 Dec 2016 15:12:16 +0100
+
+django-wfs (0.3.0-1) any; urgency=medium
 
   *  Release to clazzes.org repos.
 
