@@ -4,10 +4,14 @@
 
 '''
 
-from six import string_types
 from sqlparse import parse, tokens, sql
 
 def parse_single(sql):
+    '''
+    Parse a single SQL statement, multi-statements separated by semicolons
+    are not accepted.
+    :param sql: An SQL string.
+    '''
     
     statements = parse(sql)
     
@@ -17,11 +21,21 @@ def parse_single(sql):
     return statements[0]
 
 def append_token(tokenlist,token):
+    '''
+    Append a token to a token list. This functionality is acutally missing in the
+    sqlparse API-
+    :param tokenlist: A TokenList instance
+    :param token: A token to be appended to ``tokenlist`` an to have the parent
+                  pointer set to ``tokenlist``.
+    '''
     token.parent = tokenlist
     tokenlist.tokens.append(token) 
 
 def get_identifiers(select):
-
+    '''
+    Find the identifier list of a parsed select statement.
+    :param select: A parsed select statement.
+    '''
     identifiers = select.token_matching(lambda x: isinstance(x,sql.IdentifierList),0)
     
     if identifiers is None:
@@ -30,6 +44,11 @@ def get_identifiers(select):
     return identifiers
 
 def find_identifier(identifiers,alias):
+    '''
+    Find a select identifier by its original name or by its alias.
+    :param identifiers: An identifier list, returned by ``get_identifiers``.
+    :param alias: An alias to find the identifier in the list.
+    '''
 
     for identifier in identifiers.get_identifiers():
         if identifier.get_name() == alias:
@@ -38,6 +57,12 @@ def find_identifier(identifiers,alias):
     raise ValueError("Query [%s] does not contain an identifier with alias [%s]."%(identifiers.parent,alias))
 
 def replace_identifier(identifiers,original,replacement):
+    '''
+    Replace an identifier in the identifier list.
+    :param identifiers: An identifier list returned by ``get_identifiers``
+    :param original: The original identifier to replace.
+    :param replacement: The replacement, possibly a transformed variant of the original identifier.
+    '''
 
     identifiers.insert_after(original,replacement)
  
@@ -108,9 +133,13 @@ def build_function_call(function,identifier,num_params=1,add_alias= False):
     return sql.Function(ftokens)
 
 def add_condition(select,condition):
-    
-    if isinstance(condition,string_types):
-        condition = parse_single(condition)
+    '''
+    Insert an additional condition into the where clause of a select statement by
+    possibly adding additional ``and`` condition.
+    :param select: A parsed select statement
+    :param condition: A condition represented as a token, either parsed from
+              a string or created by ``build_function_call`` or ``build_comparison``.
+    '''
     
     where = select.token_matching(lambda x: isinstance(x,sql.Where),0)
 
