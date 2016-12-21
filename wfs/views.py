@@ -13,6 +13,8 @@ import re
 from django.db import connection
 from django.contrib.gis.geos.geometry import GEOSGeometry
 import io
+from wfs.sqlutils import parse_single, get_identifiers, find_identifier,\
+    build_function_call, add_condition, build_comparison, replace_identifier
 
 log = logging.getLogger(__name__)
 
@@ -175,7 +177,7 @@ class type_feature_iter:
             
             if ftype.model is None:
                 for feature in feature_iter:
-                    yield ftype,RawFeature(feature_iter.description,feature,self.srid,self.precision)
+                    yield ftype,RawFeature(feature_iter.description,feature,self.srid)
             else:
                 for feature in feature_iter:
                     if self.raw:
@@ -200,7 +202,7 @@ class DecimalEncoder(json.JSONEncoder):
 
 class RawFeature:
     
-    def __init__(self,colinfos,row,srid, precision = None):
+    def __init__(self,colinfos,row,srid):
         '''
         Convert a SQL result set row and a list of SQL result set colinfos
         to a properties array and a geometry geojson string.
@@ -208,8 +210,6 @@ class RawFeature:
         :param colinfos: A list of PEP-249 colinfo tuples.
         :param row: An SQL result set row with as many members as ``colinfos``
         :param srid: The target spatial reference ID to convert the geometry to.
-        :param precision: A precision for simplifying geometries or None to
-                          to skip geometry simplifications.
         '''
         
         self.props = {}
@@ -224,10 +224,7 @@ class RawFeature:
                 if srid is not None and srid != geom.srid:
                     geom.transform(srid)
                 
-                if precision is None:
-                    self.geometry = geom
-                else:
-                    self.geometry = geom.simplify(precision)
+                self.geometry = geom
                     
             else:
                 if _is_id_column(colinfo):
@@ -490,24 +487,36 @@ def getfeature(request, service,wfs_version):
                             if outputFormat != JSON_OUTPUT_FORMAT:
                                 raise NotImplementedError
                             
+                            # prepare SQL statement
+                            select = parse_single(ft.query)
+                            identifiers = get_identifiers(select)
+                            shape = find_identifier(identifiers,"shape")
+                            idi = find_identifier(identifiers,"id")
+                            
+                            # replace shape by ST_Simplify(shape,%s)
+                            if precision is not None:
+                                simplified = build_function_call("ST_Simplify",shape,1,True)
+                                replace_identifier(identifiers,shape,simplified)
+                            
+                            # add restriction id=%s
+                            add_condition(select,build_comparison(idi,"="))
+
+                            sql = str(select)
+                                
+                            if log.getEffectiveLevel() <= logging.DEBUG:
+                                log.debug("Final SQL for feature [%s] is [%s]"%(feature,sql))
+                            
                             # raw SQL result set
                             with connection.cursor() as cur:
-                                
-                                sql = ft.query
-                                
-                                if " where " in sql:
-                                    sql += " and id=%s"
+                               
+                                if precision is None:
+                                    cur.execute(ft.query,(fid,))
                                 else:
-                                    sql += " where id=%s"
-                                
-                                if log.getEffectiveLevel() <= logging.DEBUG:
-                                    log.debug("Final SQL for feature [%s] is [%s]"%(feature,sql))
-
-                                cur.execute(ft.query,(fid,))
+                                    cur.execute(ft.query,(precision,fid))
                         
                                 row = cur.fetchone()
                                 
-                                feature = RawFeature(cur.description,row,crs.srid,precision)
+                                feature = RawFeature(cur.description,row,crs.srid)
                             
                                 if feature.geometry is None:
                                     return wfs_exception(request, "NoGeometryField", "feature")
@@ -579,40 +588,51 @@ def getfeature(request, service,wfs_version):
                 
                 if ft.model is None:
 
+                    # raw SQL result set
+                    
                     # GML output of raw results not yet implemented
                     if outputFormat != JSON_OUTPUT_FORMAT:
                         raise NotImplementedError
-                            
-                    # raw SQL result set
-                    cur = connection.cursor()
                     
-                    try:
-                        
-                        sql = ft.query
-                        
-                        if resolution is not None:
+                    # prepare SQL statement
+                    select = parse_single(ft.query)
+                    identifiers = get_identifiers(select)
+                    shape = find_identifier(identifiers,"shape")
+                    idi = find_identifier(identifiers,"id")
                             
-                            res_flter = ft.resolutionfilter_set.filter(min_resolution__lte = resolution).order_by("-min_resolution").first()
+                    # parameters of SQL query
+                    params = []        
+                    
+                    # replace shape by ST_Simplify(shape,%s)
+                    if precision is not None:
+                        simplified = build_function_call("ST_Simplify",shape,1,True)
+                        replace_identifier(identifiers,shape,simplified)
+                        params.append(resolution)
                             
-                            if res_flter:
-                                if log.getEffectiveLevel() <= logging.DEBUG:
-                                    log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
+                    if resolution is not None:
+                            
+                        res_flter = ft.resolutionfilter_set.filter(min_resolution__lte = resolution).order_by("-min_resolution").first()
+                            
+                        if res_flter:
+                            if log.getEffectiveLevel() <= logging.DEBUG:
+                                log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
+                            
+                            res_flter_parsed = parse_single(res_flter.query)
                                 
-                                if " where " in sql:
-                                    sql += " and (" + res_flter.query + ")"
-                                else:
-                                    sql += " where " + res_flter.query
-                        
-                        params = []
-                        
-                        if bbox is not None:
+                            add_condition(select,res_flter_parsed)
                             
-                            sql = "select * from (" +sql +") as x where ST_Intersects(shape,%s)"
-                            params.append(bbox.hexewkb.decode("utf-8"))    
-                                                                          
-                        if log.getEffectiveLevel() <= logging.DEBUG:
-                            log.debug("Final SQL for feature [%s] is [%s]"%(ft.name,sql))
+                    if bbox is not None:
+                        add_condition(select,build_function_call("ST_Intersects",shape,1))
+                        params.append(bbox.hexewkb.decode("utf-8"))    
 
+                    sql = str(select)
+                                
+                    if log.getEffectiveLevel() <= logging.DEBUG:
+                        log.debug("Final SQL for feature [%s] is [%s]"%(ft.name,sql))
+
+                    cur = connection.cursor()
+    
+                    try:
                         cur.execute(sql,params)
                     
                         has_geometry = False
@@ -621,7 +641,7 @@ def getfeature(request, service,wfs_version):
                             if _is_geom_column(colinfo):
                                 has_geometry = True
                                 break
-                        
+                    
                         if not has_geometry:
                             return wfs_exception(request, "NoGeometryField", "feature")
 
