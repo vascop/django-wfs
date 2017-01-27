@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.gis.db.models.functions import AsGML, Transform
 from django.contrib.gis.geos import Polygon
+from wfs.functions import parse_query
 from wfs.models import Service, FeatureType
 import json
 import logging
@@ -528,7 +529,7 @@ def getfeature(request, service,wfs_version):
                             if geom_field is None:
                                 return wfs_exception(request, "NoGeometryField", "feature")
                     
-                            flter = json.loads(ft.query)
+                            flter = parse_query(ft.query)
                             objs=ft.model.model_class().objects
         
                             if flter:
@@ -658,7 +659,7 @@ def getfeature(request, service,wfs_version):
                         if geom_field is None:
                             return wfs_exception(request, "NoGeometryField", "feature")
                     
-                        flter = json.loads(ft.query)
+                        flter = parse_query(ft.query)
                         
                         objs=ft.model.model_class().objects
         
@@ -671,7 +672,7 @@ def getfeature(request, service,wfs_version):
                             
                             if res_flter:
                                 log.debug("Applying extra filter [%s] with condition [%s] for resolution [%f]"%(res_flter,res_flter.query,resolution))
-                                res_flter_parsed = json.loads(res_flter.query)
+                                res_flter_parsed = parse_query(res_flter.query)
                                 objs = objs.filter(**res_flter_parsed)
         
                         if bbox:
