@@ -1,3 +1,9 @@
+django-wfs (0.4.2-1) any; urgency=medium
+
+  * Add support for evaluating current timestamps in filters.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Fri, 27 Jan 2017 23:19:33 +0100
+
 django-wfs (0.4.1-1) any; urgency=medium
 
   * Release to clazzes.org repos.
