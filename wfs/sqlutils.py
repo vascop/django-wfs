@@ -74,11 +74,17 @@ def bare_identifier(identifier):
     :param identifier: An identifier to copy.
     '''
     itokens = []
-    for token in identifier.tokens:
-        if token.ttype in (tokens.Name,tokens.Punctuation):
-            itokens.append(sql.Token(token.ttype,token.value))
-        else:
-            break
+    
+    if isinstance(identifier,str):
+        for part in identifier.split(","):
+            itokens.append(sql.Token(tokens.Literal,part))
+    else:
+        for token in identifier.tokens:
+            if token.ttype in (tokens.Name,tokens.Punctuation):
+                itokens.append(sql.Token(token.ttype,token.value))
+            else:
+                break
+
     return sql.Identifier(itokens)
     
 

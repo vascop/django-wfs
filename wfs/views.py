@@ -335,6 +335,25 @@ class GeoJsonIterator:
         if hasattr(self.feature_iter,"close"):
             self.feature_iter.close()
 
+def preprocess_query(query,resolution,precision,bbox):
+    
+    args = {}
+    
+    if precision is not None:
+        args["precision"] = precision
+    
+    if resolution is not None:
+        args["resolution"] = resolution
+    
+    if bbox is not None:
+        args["llx"] = bbox.extent[0]
+        args["lly"] = bbox.extent[1]
+        args["urx"] = bbox.extent[2]
+        args["ury"] = bbox.extent[3]
+        
+    return query.format(**args)
+
+
 XML_OUTPUT_FORMAT = "application/gml+xml"
 ALL_XML_OUTPUT_FORMATS = ( XML_OUTPUT_FORMAT, "application/xml", "text/xml", "xml", "gml" )
 
@@ -489,7 +508,7 @@ def getfeature(request, service,wfs_version):
                                 raise NotImplementedError
                             
                             # prepare SQL statement
-                            select = parse_single(ft.query)
+                            select = parse_single(preprocess_query(ft.query,resolution,precision,bbox))
                             identifiers = get_identifiers(select)
                             shape = find_identifier(identifiers,"shape")
                             idi = find_identifier(identifiers,"id")
@@ -511,9 +530,9 @@ def getfeature(request, service,wfs_version):
                             with connection.cursor() as cur:
                                
                                 if precision is None:
-                                    cur.execute(ft.query,(fid,))
+                                    cur.execute(sql,(fid,))
                                 else:
-                                    cur.execute(ft.query,(precision,fid))
+                                    cur.execute(sql,(precision,fid))
                         
                                 row = cur.fetchone()
                                 
@@ -596,7 +615,7 @@ def getfeature(request, service,wfs_version):
                         raise NotImplementedError
                     
                     # prepare SQL statement
-                    select = parse_single(ft.query)
+                    select = parse_single(preprocess_query(ft.query,resolution,precision,bbox))
                     identifiers = get_identifiers(select)
                     shape = find_identifier(identifiers,"shape")
                     idi = find_identifier(identifiers,"id")
@@ -608,7 +627,7 @@ def getfeature(request, service,wfs_version):
                     if precision is not None:
                         simplified = build_function_call("ST_Simplify",shape,1,True)
                         replace_identifier(identifiers,shape,simplified)
-                        params.append(resolution)
+                        params.append(precision)
                             
                     if resolution is not None:
                             
@@ -623,7 +642,12 @@ def getfeature(request, service,wfs_version):
                             add_condition(select,res_flter_parsed)
                             
                     if bbox is not None:
-                        add_condition(select,build_function_call("ST_Intersects",shape,1))
+                        
+                        if ft.fields:
+                            add_condition(select,build_function_call("ST_Intersects",ft.fields,1))
+                        else:
+                            add_condition(select,build_function_call("ST_Intersects",shape,1))
+                        
                         params.append(bbox.hexewkb.decode("utf-8"))    
 
                     sql = str(select)

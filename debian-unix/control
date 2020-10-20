@@ -2,7 +2,7 @@ Source: django-wfs
 Section: devel
 Priority: extra
 Maintainer: Wolfgang Glas <wolfgang.glas@iteg.at>
-Build-Depends: cdbs, debhelper (>= 9), dh-python, python3-all, python3-all-dbg, python3-setuptools, python-all, python-all-dbg, python-setuptools
+Build-Depends: cdbs, debhelper (>= 9), dh-python, python3-all, python3-setuptools, python-all, python-setuptools
 XBCS-PBA-Category: xpkg
 XBCS-PBA-Generation: 1
 XBCS-PBA-Distributions: any

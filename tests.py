@@ -144,3 +144,7 @@ class Test(TestCase):
 
         self.assertEquals("select objectid as id, name,area,ST_Simplify(wkb_geometry,%s) AS shape from import.abc_polygon where ST_Intersects(wkb_geometry,%s) and area > 1000000",str(select))
 
+
+    def testBuildFunctionCall(self):
+        fc = build_function_call("ST_Simplify","s.shape",1)
+        log.info("fc=%s"%(fc,))

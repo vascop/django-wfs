@@ -61,7 +61,7 @@ class Service(models.Model):
 @python_2_unicode_compatible
 class FeatureType(models.Model):
     service = models.ForeignKey(Service)
-    name = models.CharField(max_length=254)
+    name = models.CharField(max_length=254,unique=True)
     title = models.CharField(null=True, blank=True, max_length=254)
     keywords = models.CharField(null=True, blank=True, max_length=254)
     abstract = models.TextField(null=True, blank=True)
