@@ -644,7 +644,8 @@ def getfeature(request, service,wfs_version):
                     if bbox is not None:
                         
                         if ft.fields:
-                            add_condition(select,build_function_call("ST_Intersects",ft.fields,1))
+                            if ft.fields != "{nobbox}":
+                                add_condition(select,build_function_call("ST_Intersects",ft.fields,1))
                         else:
                             add_condition(select,build_function_call("ST_Intersects",shape,1))
                         
