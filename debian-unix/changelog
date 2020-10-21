@@ -1,3 +1,9 @@
+django-wfs (0.4.4-1) any; urgency=medium
+
+  * Release to clazzes.org repos.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Wed, 21 Oct 2020 11:12:21 +0200
+
 django-wfs (0.4.4-0) any; urgency=medium
 
   * Development iteration for the infamous {nobbox} hack.
