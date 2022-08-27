@@ -1,3 +1,9 @@
+django-wfs (2.0.0-0beta0) any; urgency=medium
+
+  * Switch to django-2, get rid of python-2 support.
+
+ -- Wolfgang Glas <wolfgang.glas@iteg.at>  Sat, 27 Aug 2022 21:35:41 +0200
+
 django-wfs (0.4.4-1) any; urgency=medium
 
   * Release to clazzes.org repos.

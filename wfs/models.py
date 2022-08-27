@@ -1,12 +1,7 @@
-from __future__ import unicode_literals
-
 from django.db import models
 from django.core.urlresolvers import reverse
 from django.contrib.sites.models import Site
 from django.contrib.contenttypes.models import ContentType
-
-# See https://docs.djangoproject.com/en/1.9/topics/python3/#str-and-unicode-methods
-from django.utils.encoding import python_2_unicode_compatible
 
 import re
 
@@ -25,7 +20,6 @@ def split_comma_separated(value):
         return []
   
 
-@python_2_unicode_compatible
 class Service(models.Model):
     name = models.CharField(max_length=254)
     title = models.CharField(max_length=254)
@@ -58,7 +52,6 @@ class Service(models.Model):
         return self.name
 
 
-@python_2_unicode_compatible
 class FeatureType(models.Model):
     service = models.ForeignKey(Service)
     name = models.CharField(max_length=254,unique=True)
@@ -109,7 +102,6 @@ class FeatureType(models.Model):
         field = self.get_model_field(field_name)
         return field and hasattr(field, "geom_type")
 
-@python_2_unicode_compatible
 class MetadataURL(models.Model):
     featuretype = models.ForeignKey(FeatureType)
     url = models.URLField()
@@ -118,7 +110,6 @@ class MetadataURL(models.Model):
         return self.url
 
 
-@python_2_unicode_compatible
 class BoundingBox(models.Model):
     featuretype = models.ForeignKey(FeatureType)
     minx = models.CharField(max_length=254)
@@ -129,7 +120,6 @@ class BoundingBox(models.Model):
     def __str__(self):
         return "((" + self.minx + ", " + self.miny + "), (" + self.maxx + ", " + self.maxy + "))"
 
-@python_2_unicode_compatible
 class ResolutionFilter(models.Model):
     featuretype = models.ForeignKey(FeatureType)
     min_resolution = models.FloatField(help_text="The minimal resolution at which to apply the additional query filter.",db_index=True)

@@ -10,7 +10,7 @@ def read_version():
     fn  = os.path.join(os.path.join(MYDIR,"debian-unix"),"changelog")
     with open(fn) as fd:
         line = fd.readline()   
-        version,n = re.subn('^'+PACKAGE+'\\s*\\(([^-]*)-[^)]\\).*\n','\\1',line)
+        version,n = re.subn('^'+PACKAGE+'\\s*\\(([^-]*)-[^)]+\\).*\n','\\1',line)
         if n != 1:
             raise SyntaxError("debian changelog line [%s] is malformatted"%line.substring[:-1])
         return version
