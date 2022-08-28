@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wfs:WFS_Capabilities
+       xmlns:ows="http://www.opengis.net/ows"
+       xmlns:ogc="http://www.opengis.net/ogc"
+       xmlns:wfs="http://www.opengis.net/wfs"
+       xmlns:gml="http://www.opengis.net/gml"
+       xmlns:xlink="http://www.w3.org/1999/xlink"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd"
+       version="1.1.0">
+<!-- ================================================================== -->
+<!-- SERVICE IDENTIFICATION SECTION -->
+<!-- ================================================================== -->
+    <ows:ServiceIdentification>
+       <ows:Title>{{ service.title }}</ows:Title>
+       {% if service.abstract %}<ows:Abstract>{{ service.abstract }}</ows:Abstract>{% endif %}
+       {% if keywords %}<ows:Keywords>
+          {% for keyword in keywords %}<ows:Keyword>{{ keyword }}</ows:Keyword>{% endfor %}
+       </ows:Keywords>{% endif %}
+       <ows:ServiceType>WFS</ows:ServiceType>
+       <ows:ServiceTypeVersion>1.1.0</ows:ServiceTypeVersion>
+       {% if service.fees %}<ows:Fees>{{ service.fees }}</ows:Fees>{% endif %}
+       {% if service.access_constraints %}<ows:AccessConstraints>{{ service.access_constraints</ows:AccessConstraints>{% endif %}
+    </ows:ServiceIdentification>
+<!-- ================================================================== -->
+<!-- OPERATIONS METADATA SECTION -->
+<!-- ================================================================== -->
+   <ows:OperationsMetadata>
+      <ows:Operation name="GetCapabilities">
+         <ows:DCP>
+            <ows:HTTP>
+               <ows:Get xlink:href="{{ service.online_resource }}"/>
+            </ows:HTTP>
+         </ows:DCP>
+         <ows:Parameter name="AcceptVersions">
+            <ows:Value>1.1.0</ows:Value>
+            <ows:Value>1.0.0</ows:Value>
+         </ows:Parameter>
+         <ows:Parameter name="AcceptFormats">
+            <ows:Value>text/xml</ows:Value>
+         </ows:Parameter>
+         <ows:Parameter name="Sections">
+            <ows:Value>ServiceIdentification</ows:Value>
+            <ows:Value>OperationsMetadata</ows:Value>
+            <ows:Value>FeatureTypeList</ows:Value>
+            <ows:Value>Filter_Capabilities</ows:Value>
+         </ows:Parameter>
+      </ows:Operation>
+      <ows:Operation name="DescribeFeatureType">
+         <ows:DCP>
+            <ows:HTTP>
+               <ows:Get xlink:href="{{ service.online_resource }}"/>
+            </ows:HTTP>
+         </ows:DCP>
+         <ows:Parameter name="outputFormat">
+            <ows:Value>text/xml; subtype=gml/3.1.1</ows:Value>
+            <ows:Value>application/gml+xml</ows:Value>
+         </ows:Parameter>
+      </ows:Operation>
+      <ows:Operation name="GetFeature">
+         <ows:DCP>
+            <ows:HTTP>
+               <ows:Get xlink:href="{{ service.online_resource }}"/>
+            </ows:HTTP>
+         </ows:DCP>
+         <ows:Parameter name="outputFormat">
+            <ows:Value>text/xml; subtype=gml/3.1.1</ows:Value>
+            <ows:Value>application/gml+xml</ows:Value>
+            <ows:Value>application/json</ows:Value>
+         </ows:Parameter>
+      </ows:Operation>
+      <ows:Parameter name="srsName">
+         {% for srs in allsrs %}<ows:Value>{{ srs }}</ows:Value>{% endfor %}
+      </ows:Parameter>
+      <ows:Constraint name="DefaultMaxFeatures">
+         <ows:Value>10000</ows:Value>
+      </ows:Constraint>
+   </ows:OperationsMetadata>
+<!-- ================================================================== -->
+<!-- FEATURE TYPE LIST SECTION -->
+<!-- ================================================================== -->
+   <wfs:FeatureTypeList>
+{% for feature in service.featuretype_set.all %}
+      <wfs:FeatureType>
+         <wfs:Name>{{ feature.name }}</wfs:Name>
+         <wfs:Title>{{ feature.title }}</wfs:Title>
+         <wfs:Abstract>{{ feature.abstract }}</wfs:Abstract>
+         {% if feature.get_keywords_list %}<ows:Keywords>
+            {% for keyword in feature.get_keywords_list %}<ows:Keyword>{{ keyword }}</ows:Keyword>{% endfor %}
+         </ows:Keywords>{% endif %}
+         <wfs:DefaultSRS>{{ feature.srs }}</wfs:DefaultSRS>
+         {% for srs in feature.get_other_srs_names %}<wfs:OtherSRS>{{ srs }}</wfs:OtherSRS>{% endfor %}
+         <wfs:OutputFormats>
+            <wfs:Format>text/xml; subtype=gml/3.1.1</wfs:Format>
+            <wfs:Format>application/gml+xml</wfs:Format>
+            <wfs:Format>application/json</wfs:Format>
+         </wfs:OutputFormats>
+         {% for bbox in feature.boundingbox_set.all %}<ows:WGS84BoundingBox>
+            <ows:LowerCorner>{{ bbox.minx }} {{ bbox.miny }}</ows:LowerCorner>
+            <ows:UpperCorner>{{ bbox.maxx }} {{ bbox.maxy }}</ows:UpperCorner>
+         </ows:WGS84BoundingBox>{% endfor %}
+      </wfs:FeatureType>
+{% endfor %}
+   </wfs:FeatureTypeList>
+<!-- ================================================================== -->
+<!-- FILTER CAPABILITIES SECTION -->
+<!-- ================================================================== -->
+   <ogc:Filter_Capabilities>
+      <ogc:Spatial_Capabilities>
+         <ogc:GeometryOperands>
+            <ogc:GeometryOperand>gml:Envelope</ogc:GeometryOperand>
+         </ogc:GeometryOperands>
+         <ogc:SpatialOperators>
+            <ogc:SpatialOperator name="BBOX"/>
+         </ogc:SpatialOperators>
+      </ogc:Spatial_Capabilities>
+      <ogc:Scalar_Capabilities/>
+      <ogc:Id_Capabilities>
+         <ogc:FID/>
+      </ogc:Id_Capabilities>
+   </ogc:Filter_Capabilities>
+</wfs:WFS_Capabilities>

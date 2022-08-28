@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <WFS_Capabilities 
     xmlns="http://www.opengis.net/wfs" 
-    {% for ns in namespaces %}
-      xmlns:{{ns.name}}="{{ns.domain}}"
-    {% endfor %}
     xmlns:ogc="http://www.opengis.net/ogc"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    version="1.0.0" 
-    xsi:schemaLocation="http://www.opengis.net/wfs http://geoserver.org/geoserver/schemas/wfs/1.0.0/WFS-capabilities.xsd">
+    version="{{version}}" 
+    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/{{wfs_path}}">
 
     <Service>
         <Name>{{ service.name }}</Name>
@@ -25,12 +22,12 @@
             <GetCapabilities>
                 <DCPType>
                     <HTTP>
-                        <Get onlineResource="{{ service.onlineresource }}?request=GetCapabilities"/>
+                        <Get onlineResource="{{ service.online_resource }}?request=GetCapabilities"/>
                     </HTTP>
                 </DCPType>
                 <DCPType>
                     <HTTP>
-                        <Post onlineResource="{{ service.onlineresource }}"/>
+                        <Post onlineResource="{{ service.online_resource }}"/>
                     </HTTP>
                 </DCPType>
             </GetCapabilities>
@@ -41,12 +38,12 @@
                 </SchemaDescriptionLanguage>
                 <DCPType>
                     <HTTP>
-                        <Get onlineResource="{{ service.onlineresource }}?request=DescribeFeatureType"/>
+                        <Get onlineResource="{{ service.online_resource }}?request=DescribeFeatureType"/>
                     </HTTP>
                 </DCPType>
                 <DCPType>
                     <HTTP>
-                        <Post onlineResource="{{ service.onlineresource }}"/>
+                        <Post onlineResource="{{ service.online_resource }}"/>
                     </HTTP>
                 </DCPType>
             </DescribeFeatureType>
@@ -57,12 +54,12 @@
                 </ResultFormat>
                 <DCPType>
                     <HTTP>
-                        <Get onlineResource="{{ service.onlineresource }}?request=GetFeature"/>
+                        <Get onlineResource="{{ service.online_resource }}?request=GetFeature"/>
                    </HTTP>
                 </DCPType>
                 <DCPType>
                     <HTTP>
-                        <Post onlineResource="{{ service.onlineresource }}"/>
+                        <Post onlineResource="{{ service.online_resource }}"/>
                     </HTTP>
                 </DCPType>
             </GetFeature>

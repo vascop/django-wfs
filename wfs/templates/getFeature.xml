@@ -1,18 +1,33 @@
-<?xml version="1.0" encoding="UTF-8"?>
+{% load wfs_extras %}<?xml version="1.0" encoding="UTF-8"?>
 <wfs:FeatureCollection
    xmlns:wfs="http://www.opengis.net/wfs"
    xmlns:gml="http://www.opengis.net/gml"
    xmlns:ogc="http://www.opengis.net/ogc"
    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-   xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-basic.xsd">
+   xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/{{wfs_path}}">
+{% if bbox0 %}
+    <gml:boundedBy>
+{% if version == '1.0.0' %}
+      	<gml:Box srsName="{{ crs }}">  
+      		<gml:coordinates>  
+      			{{ bbox0 }},{{ bbox1 }} {{ bbox2 }},{{ bbox3 }}
+      		</gml:coordinates>  
+      	</gml:Box>
+{% else %}
+	    <gml:Envelope srsDimension="2" srsName="{{ crs }}">
+            <gml:lowerCorner>{{ bbox0 }} {{ bbox1 }}</gml:lowerCorner>
+            <gml:upperCorner>{{ bbox2 }} {{ bbox3 }}</gml:upperCorner>
+        </gml:Envelope>
+{% endif %}
+     </gml:boundedBy> 
+{% endif %}
     {% for ftype, feature in features %}
       {% if feature.gml %}
         <gml:featureMember>
-          <{{ ftype.name }} fid="{{ ftype.name }}.{{ feature.id }}">
-            {{ feature.xml|safe }}
+          <{{ ftype.name }} {% if version == '1.0.0' %}fid{% else %}gml:id{% endif %}="{{ ftype.name }}.{{ feature.id }}">
+            {% gml_feature ftype feature %}
           </{{ ftype.name }}>
         </gml:featureMember>
       {% endif %}
     {% endfor %}
 </wfs:FeatureCollection>
-
