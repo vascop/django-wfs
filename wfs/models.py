@@ -1,5 +1,5 @@
 from django.db import models
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.contrib.contenttypes.models import ContentType
 
@@ -53,7 +53,7 @@ class Service(models.Model):
 
 
 class FeatureType(models.Model):
-    service = models.ForeignKey(Service)
+    service = models.ForeignKey(Service,on_delete=models.CASCADE)
     name = models.CharField(max_length=254,unique=True)
     title = models.CharField(null=True, blank=True, max_length=254)
     keywords = models.CharField(null=True, blank=True, max_length=254)
@@ -61,7 +61,7 @@ class FeatureType(models.Model):
     srs = models.CharField(max_length=254, default="EPSG:4326")
     othersrs = models.CharField(max_length=1020, default="EPSG:3857",null=True, blank=True,
                                 help_text='Comma separated list of alternative Spatial Reference Systems to which database-persisted coordinates may be transformed.')
-    model = models.ForeignKey(ContentType,null=True, blank=True, help_text="django model or null, if a raw SQL query should be delivered.")
+    model = models.ForeignKey(ContentType,on_delete=models.PROTECT,null=True, blank=True, help_text="django model or null, if a raw SQL query should be delivered.")
     fields = models.CharField(max_length=254, null=True, blank=True)
     query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter() or a raw SQL query.")
 
@@ -103,7 +103,7 @@ class FeatureType(models.Model):
         return field and hasattr(field, "geom_type")
 
 class MetadataURL(models.Model):
-    featuretype = models.ForeignKey(FeatureType)
+    featuretype = models.ForeignKey(FeatureType,on_delete=models.CASCADE)
     url = models.URLField()
 
     def __str__(self):
@@ -111,7 +111,7 @@ class MetadataURL(models.Model):
 
 
 class BoundingBox(models.Model):
-    featuretype = models.ForeignKey(FeatureType)
+    featuretype = models.ForeignKey(FeatureType,on_delete=models.CASCADE)
     minx = models.CharField(max_length=254)
     miny = models.CharField(max_length=254)
     maxx = models.CharField(max_length=254)
@@ -121,7 +121,7 @@ class BoundingBox(models.Model):
         return "((" + self.minx + ", " + self.miny + "), (" + self.maxx + ", " + self.maxy + "))"
 
 class ResolutionFilter(models.Model):
-    featuretype = models.ForeignKey(FeatureType)
+    featuretype = models.ForeignKey(FeatureType,on_delete=models.CASCADE)
     min_resolution = models.FloatField(help_text="The minimal resolution at which to apply the additional query filter.",db_index=True)
     query = models.TextField(default="{}", help_text="JSON containing the query to be passed to a Django queryset .filter()")
 
