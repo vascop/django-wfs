@@ -19,8 +19,8 @@ export PYBUILD_NAME = $(package)
 export PYBUILD_DISABLE=test
 
 %:
-	dh $@ --with python2,python3 --buildsystem=pybuild
+	dh $@ --with python3 --buildsystem=pybuild
 
 clean::
-	cd debian && rm -rf substvars files *.substvars devhost.txt.gz *.log python3-$(package) python-$(package) tmp
+	cd debian && rm -rf substvars files *.substvars devhost.txt.gz *.log python3-$(package) tmp
 	rm -rf .pybuild

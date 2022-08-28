@@ -5,10 +5,6 @@ Created on 09. Juni 2016
 @author: wglas
 '''
 
-from __future__ import unicode_literals
-
-from django.utils.encoding import python_2_unicode_compatible
-
 import re
 import logging
 
@@ -18,7 +14,6 @@ CRS_URN_REGEX = re.compile("^urn:([a-z]+):def:crs:([a-z]+):([0-9]+\\.[0-9]+(\\.[
 
 DEFAULT_EPSG_VERSION="6.9"
 
-@python_2_unicode_compatible
 class CRS:
     '''
     Represents a CRS (Coordinate Reference System), which preferably follows the URN format

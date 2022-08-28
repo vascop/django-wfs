@@ -439,8 +439,9 @@ def getfeature(request, service,wfs_version):
                 else:
                     bbox = Polygon.from_bbox((float(bbox_values[0]),float(bbox_values[1]),float(bbox_values[2]),float(bbox_values[3])))
                 
-                bbox.set_srid(bbox_crs.srid)
+                bbox.srid = bbox_crs.srid
             except:
+                log.exception(f"Error parsing bbox [{low_value}]:")
                 return wfs_exception(request, "InvalidParameterValue", "bbox", value)
 
         elif low_key == "srsname":
@@ -456,7 +457,7 @@ def getfeature(request, service,wfs_version):
             
             # This is for the case, that srsname is hit after the bbox parameter above
             if bbox and not bbox_has_crs:
-                bbox.set_srid(crs.srid)
+                bbox.srid = crs.srid
 
         elif low_key == "filter":
             filtr = low_value
